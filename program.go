@@ -12,6 +12,7 @@ import (
 )
 
 const MaxProcessKillWaitTime = (5 * time.Second)
+const ProcessStateSettleInterval = (250 * time.Millisecond)
 
 type ProgramState int
 
@@ -307,16 +308,51 @@ func (self *Program) startProcess() error {
 
 func (self *Program) monitorProcessState() {
 	if self.command != nil {
-		self.commandIsRunning = true
-		self.command.Wait()
+		if code, err := self.waitForProcessStatus(); err == nil {
 
-		// TODO: IsExpectedStatus check
-		self.transitionTo(ProgramExited)
+			if self.IsExpectedStatus(code) {
+				self.transitionTo(ProgramExited)
+			} else if self.ShouldAutoRestart() {
+				self.transitionTo(ProgramBackoff)
+			} else {
+				self.transitionTo(ProgramFatal)
+			}
+		} else {
+			log.Errorf("Program failed to stop: %v", err)
+			self.transitionTo(ProgramFatal)
+		}
 	}
 
 	self.commandIsRunning = false
+}
 
-	// handle process exit state; transitions -> [EXITED, BACKOFF, FATAL]
+func (self *Program) waitForProcessStatus() (int, error) {
+	self.commandIsRunning = true
+	self.command.Wait()
+	processExitedAt := time.Now()
+
+	for {
+		if self.command.ProcessState != nil {
+			psI := self.command.ProcessState.Sys()
+
+			switch psI.(type) {
+			case syscall.WaitStatus:
+				ps := psI.(syscall.WaitStatus)
+
+				if ps.Exited() {
+					return ps.ExitStatus(), nil
+				} else if time.Since(processExitedAt) > (time.Duration(self.StopWaitSeconds) * time.Second) {
+					self.killProcess(true)
+					return -1, fmt.Errorf("Timed out waiting for process to exit gracefully")
+				} else {
+					time.Sleep(ProcessStateSettleInterval)
+				}
+
+			default:
+				return -1, fmt.Errorf("Unsupported process state structure %T", psI)
+			}
+		}
+	}
 }
 
 func (self *Program) killProcess(force bool) error {
