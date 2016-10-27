@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const MaxProcessKillWaitTime = (5 * time.Second)
+
 type ProgramState int
 
 const (
@@ -109,10 +111,13 @@ type Program struct {
 	StderrEventsEnabled   bool          `ini:"stderr_events_enabled,omitempty"`
 	Environment           []string      `ini:"environment,omitempty" delim:","`
 	ServerUrl             string        `ini:"serverurl,omitempty"`
-	processStartCount     int
+	processRetryCount     int
 	manager               *Manager
 	command               *exec.Cmd
 	hasEverBeenStarted    bool
+	lastExitStatus        int
+	lastStartedAt         time.Time
+	commandIsRunning      bool
 }
 
 func LoadProgramsFromConfig(data []byte, manager *Manager) (map[string]*Program, error) {
@@ -129,20 +134,8 @@ func LoadProgramsFromConfig(data []byte, manager *Manager) (map[string]*Program,
 
 				if err := section.MapTo(program); err == nil {
 					program.LoadIndex = loadedPrograms
-
-					shwords := shellwords.NewParser()
-					shwords.ParseBacktick = false
-					shwords.ParseEnv = true
-
-					if words, err := shwords.Parse(program.Command); err == nil {
-						program.command = exec.Command(words[0], words[1:]...)
-
-						programs[program.Name] = program
-						loadedPrograms += 1
-					} else {
-						return nil, err
-					}
-
+					programs[program.Name] = program
+					loadedPrograms += 1
 				} else {
 					return nil, err
 				}
@@ -177,143 +170,159 @@ func NewProgram(name string, manager *Manager) *Program {
 		Environment:           make([]string, 0),
 		ServerUrl:             `AUTO`,
 		manager:               manager,
+		lastExitStatus:        -1,
+		processRetryCount:     0,
 	}
 }
 
-func (self *Program) Start(manual bool) {
+func (self *Program) HasEverBeenStarted() bool {
+	return self.hasEverBeenStarted
+}
+
+func (self *Program) ShouldAutoRestart() bool {
 	switch self.State {
-	case ProgramRunning, ProgramStarting:
-		return
-	case ProgramBackoff:
-		if self.processStartCount < self.StartRetries {
-			self.runProcess()
-			return
+	case ProgramFatal, ProgramStopped:
+		return false
+	}
+
+	autorestart := strings.ToLower(self.AutoRestart)
+
+	switch autorestart {
+	case `unexpected`:
+		if self.IsExpectedStatus(self.lastExitStatus) {
+			return false
 		}
 
-	case ProgramExited:
-		self.runProcess()
-		return
-
-	case ProgramStopped:
-		if !self.hasEverBeenStarted {
-			self.runProcess()
-			return
+		fallthrough
+	case `true`:
+		if self.processRetryCount < self.StartRetries {
+			return true
 		}
 	}
 
-	// process falls back to fatal
-	self.StopFatal()
+	return false
+}
+
+func (self *Program) IsExpectedStatus(code int) bool {
+	for _, validStatus := range self.ExitCodes {
+		if code == validStatus {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (self *Program) Start() {
+	self.transitionTo(ProgramStarting)
+
+	// if process started successfully and stayed running for self.StartSeconds
+	if err := self.startProcess(); err == nil {
+		self.transitionTo(ProgramRunning)
+	} else {
+		log.Debugf("[%s] Start failed", self.Name)
+		self.killProcess(false)
+
+		if self.ShouldAutoRestart() {
+			self.transitionTo(ProgramBackoff)
+		} else {
+			self.StopFatal()
+		}
+	}
+}
+
+func (self *Program) Stop() {
+	self.transitionTo(ProgramStopping)
+	self.processRetryCount = 0
+
+	if err := self.killProcess(false); err == nil {
+		self.transitionTo(ProgramStopped)
+	} else {
+		self.transitionTo(ProgramFatal)
+	}
 }
 
 func (self *Program) StopFatal() {
-	self.processStartCount = 0
-	self.setState(ProgramFatal)
+	self.Stop()
+	self.transitionTo(ProgramFatal)
 }
 
-func (self *Program) setState(state ProgramState) {
-	self.State = state
-	self.manager.pushProcessStateEvent(state, self, nil)
-}
+func (self *Program) transitionTo(state ProgramState) {
+	if self.State != state {
+		switch state {
+		case ProgramBackoff:
+			self.processRetryCount += 1
+		}
 
-func (self *Program) setErrorState(err error) {
-	if self.processStartCount < self.StartRetries {
-		self.State = ProgramBackoff
-	} else {
-		self.State = ProgramFatal
-	}
-
-	self.manager.pushProcessStateEvent(self.State, self, err)
-}
-
-func (self *Program) runProcess() {
-	self.hasEverBeenStarted = true
-	self.processStartCount += 1
-
-	if err := self.command.Start(); err != nil {
-		self.setErrorState(err)
-		return
-	}
-
-	done := make(chan bool)
-	go self.waitForRunningProcess(done)
-
-	select {
-	case <-done:
-		return
-	case <-time.After(time.Duration(self.StartSeconds) * time.Second):
-		self.killProcess()
+		self.State = state
+		self.manager.pushProcessStateEvent(state, self, nil)
 	}
 }
 
-func (self *Program) waitForRunningProcess(done chan bool) {
-	var exit interface{}
-	exit = self.command.Wait()
+func (self *Program) startProcess() error {
+	if self.command != nil {
+		if err := self.killProcess(false); err != nil {
+			self.command = nil
+			self.transitionTo(ProgramFatal)
+			return err
+		}
+	}
 
-	log.Debugf("POSTWAIT: %v (%T)", exit, exit)
+	self.commandIsRunning = false
 
-	switch exit.(type) {
-	case *exec.ExitError:
-		exitStatus := exit.(*exec.ExitError)
-		pStateI := exitStatus.Sys()
+	shwords := shellwords.NewParser()
+	shwords.ParseEnv = true
+	shwords.ParseBacktick = false
 
-		switch pStateI.(type) {
-		case syscall.WaitStatus:
-			pState := pStateI.(syscall.WaitStatus)
-			exitCode := pState.ExitStatus()
-			var statusOk bool
-			exitWaitStart := time.Now()
+	if words, err := shwords.Parse(self.Command); err == nil {
+		self.command = exec.Command(words[0], words[1:]...)
 
-			for {
-				if time.Now().Sub(exitWaitStart) > (time.Duration(self.StopWaitSeconds) * time.Second) {
-					self.setErrorState(fmt.Errorf("Timed out waiting for %q to stop, killing process...", self.Name))
-					self.killProcess()
-					done <- true
-					return
+		// setup environment, piping, etc...
+
+		if err := self.command.Start(); err == nil {
+			self.lastStartedAt = time.Now()
+			go self.monitorProcessState()
+
+			if self.StartSeconds > 0 {
+				startDuration := time.Duration(self.StartSeconds) * time.Second
+
+				select {
+				case <-time.After(startDuration):
+					if self.commandIsRunning {
+						return nil
+					} else {
+						return fmt.Errorf("Command did not stay running for %s", startDuration)
+					}
 				}
-
-				if pState.Exited() {
-					break
-				} else {
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-
-			for _, validStatus := range self.ExitCodes {
-				if exitCode == validStatus {
-					statusOk = true
-					break
-				}
-			}
-
-			if statusOk {
-				self.setState(ProgramExited)
 			} else {
-				self.setErrorState(fmt.Errorf("Program %q exited with status %d",
-					self.Name,
-					exitCode))
+				return nil
 			}
+		} else {
+			return err
 		}
-	default:
-		self.setErrorState(fmt.Errorf("Execution error: %v", exit))
+	} else {
+		return err
 	}
-
-	done <- true
 }
 
-func (self *Program) killProcess() {
-	if self.command.Process != nil {
-		var err error
+func (self *Program) monitorProcessState() {
+	if self.command != nil {
+		self.commandIsRunning = true
+		self.command.Wait()
 
-		if signal := self.StopSignal.Signal(); signal == os.Kill {
-			err = self.command.Process.Kill()
-		} else {
-			err = self.command.Process.Signal(signal)
-		}
-
-		if err == nil {
-			self.setState(ProgramStopping)
-		} else {
-			self.setState(ProgramFatal)
-		}
+		// TODO: IsExpectedStatus check
+		self.transitionTo(ProgramExited)
 	}
+
+	self.commandIsRunning = false
+
+	// handle process exit state; transitions -> [EXITED, BACKOFF, FATAL]
+}
+
+func (self *Program) killProcess(force bool) error {
+	// wait up to self.StopWaitSeconds for process to disappear, otherwise
+	// kill-9 it.  wait for MaxProcessKillWaitTime, then FATAL it
+
+	self.commandIsRunning = false
+	return nil
 }

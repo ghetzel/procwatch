@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/op/go-logging"
 	"io/ioutil"
+	"sync"
 	"time"
 )
 
@@ -46,31 +47,70 @@ func (self *Manager) Run() error {
 	go self.startEventLogger()
 
 	for {
-		// start processes in the STOPPED state
-		if err := self.performAutomaticStarts(); err != nil {
-			return err
+		var checkLock sync.WaitGroup
+
+		for _, program := range self.Programs {
+			checkLock.Add(1)
+			go self.checkProgramState(program, &checkLock)
 		}
+
+		// wait for all program checks to be complete for this iteration
+		checkLock.Wait()
 
 		time.Sleep(500 * time.Millisecond)
 	}
 }
 
-func (self *Manager) performAutomaticStarts() error {
-	for _, program := range self.GetProgramsByState(ProgramStopped) {
-		if program.AutoStart {
-			program.Start(false)
+// Process Management States
+//
+// STOPPED -> STARTING
+//          |- up for startsecs? -> RUNNING
+//          |                       |- manually stopped? -> STOPPING
+//          |                                               |- stopped in time? -> [STOPPED]
+//          |                                               \- no?              -> [FATAL]
+//          |                       \- process exited?   -> EXITED -> STARTING...
+//          |
+//          |- no?
+//          |   \- should restart? -> BACKOFF -> STARTING...
+//          |                      -> [FATAL]
+//          |
+//          \- manually stopped?   -> STOPPING
+//                                    |- stopped in time? -> [STOPPED]
+//                                    \- no?              -> [FATAL]
+//
+func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
+	switch program.State {
+	case ProgramStopped:
+		// first-time start for autostart programs
+		if program.AutoStart && !program.HasEverBeenStarted() {
+			program.Start()
+		}
+
+	case ProgramExited:
+		// automatic restart of cleanly-exited programs
+		if program.ShouldAutoRestart() {
+			program.Start()
+		}
+
+	case ProgramBackoff:
+		if program.ShouldAutoRestart() {
+			program.Start()
+		} else {
+			program.StopFatal()
 		}
 	}
 
-	return nil
+	checkLock.Done()
 }
 
-func (self *Manager) GetProgramsByState(state ProgramState) []*Program {
+func (self *Manager) GetProgramsByState(states ...ProgramState) []*Program {
 	programs := make([]*Program, 0)
 
 	for _, program := range self.Programs {
-		if program.State == state {
-			programs = append(programs, program)
+		for _, state := range states {
+			if program.State == state {
+				programs = append(programs, program)
+			}
 		}
 	}
 
