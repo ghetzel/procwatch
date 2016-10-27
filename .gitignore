@@ -1,0 +1,7 @@
+/bin
+/vendor
+/public
+/test
+/test*.*
+/*.log
+/*.ini

@@ -1,0 +1,16 @@
+hash: 9cfb22facc0d842a9caeee0588175c24c24f037c589c9814446497cdceebca8e
+updated: 2016-10-26T22:05:00.387612882-04:00
+imports:
+- name: github.com/davecgh/go-spew
+  version: 6cf5744a041a0022271cefed95ba843f6d87fd51
+  subpackages:
+  - spew
+- name: github.com/ghetzel/cli
+  version: 4733699ce30faa633c4db36ebfbe427963593d7d
+- name: github.com/go-ini/ini
+  version: 6e4869b434bd001f6983749881c7ead3545887d8
+- name: github.com/mattn/go-shellwords
+  version: f4e566c536cf69158e808ec28ef4182a37fdc981
+- name: github.com/op/go-logging
+  version: 970db520ece77730c7e4724c61121037378659d9
+testImports: []

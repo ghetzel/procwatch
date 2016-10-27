@@ -1,0 +1,12 @@
+package: github.com/ghetzel/procwatch
+import:
+- package: github.com/ghetzel/cli
+- package: github.com/op/go-logging
+- package: github.com/go-ini/ini
+  version: ^1.21.1
+- package: github.com/davecgh/go-spew
+  version: ^1.0.0
+  subpackages:
+  - spew
+- package: github.com/mattn/go-shellwords
+  version: ^1.0.0

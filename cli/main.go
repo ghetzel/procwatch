@@ -1,0 +1,52 @@
+package main
+
+import (
+	"github.com/ghetzel/cli"
+	"github.com/ghetzel/procwatch"
+	"github.com/op/go-logging"
+	"os"
+)
+
+var log = logging.MustGetLogger(`main`)
+
+func main() {
+	app := cli.NewApp()
+	app.Name = `procwatch`
+	app.Usage = `A process execution monitor`
+	app.Version = `0.0.1`
+	app.EnableBashCompletion = false
+
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:   `log-level, L`,
+			Usage:  `Level of log output verbosity`,
+			Value:  `debug`,
+			EnvVar: `LOGLEVEL`,
+		},
+		cli.StringFlag{
+			Name:   `config, c`,
+			Usage:  `The configuration file to load`,
+			Value:  `config.ini`,
+			EnvVar: `PROCWATCH_CONFIG`,
+		},
+	}
+
+	app.Before = func(c *cli.Context) error {
+		log.Infof("Starting %s %s", c.App.Name, c.App.Version)
+		return nil
+	}
+
+	app.Action = func(c *cli.Context) {
+		manager := procwatch.NewManager(c.String(`config`))
+
+		if err := manager.Initialize(); err == nil {
+			if err := manager.Run(); err != nil {
+				log.Fatalf("Failed to start procwatch manager: %v", err)
+			}
+		} else {
+			log.Fatal(err)
+		}
+	}
+
+	app.Run(os.Args)
+}
