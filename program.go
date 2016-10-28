@@ -221,13 +221,13 @@ func (self *Program) Start() {
 	if err := self.startProcess(); err == nil {
 		self.transitionTo(ProgramRunning)
 	} else {
-		log.Debugf("[%s] Start failed", self.Name)
 		self.killProcess(false)
 
 		if self.ShouldAutoRestart() {
 			self.transitionTo(ProgramBackoff)
 		} else {
-			self.StopFatal()
+			self.killProcess(false)
+			self.transitionTo(ProgramFatal)
 		}
 	}
 }
@@ -308,13 +308,19 @@ func (self *Program) startProcess() error {
 
 func (self *Program) monitorProcessState() {
 	if self.command != nil {
+		// block until process exits and yields an exit status
 		if code, err := self.waitForProcessStatus(); err == nil {
+			// update the last known exit status
+			self.lastExitStatus = code
 
 			if self.IsExpectedStatus(code) {
+				// if the code is an expected one, EXITED
 				self.transitionTo(ProgramExited)
 			} else if self.ShouldAutoRestart() {
+				// if not expected, but we should restart: BACKOFF
 				self.transitionTo(ProgramBackoff)
 			} else {
+				// unexpected status that shouldn't restart: FATAL
 				self.transitionTo(ProgramFatal)
 			}
 		} else {
@@ -331,6 +337,8 @@ func (self *Program) waitForProcessStatus() (int, error) {
 	self.command.Wait()
 	processExitedAt := time.Now()
 
+	// loop until process fully exits and we have a status, or if we've exceeding the
+	// stopwait interval
 	for {
 		if self.command.ProcessState != nil {
 			psI := self.command.ProcessState.Sys()
@@ -356,9 +364,38 @@ func (self *Program) waitForProcessStatus() (int, error) {
 }
 
 func (self *Program) killProcess(force bool) error {
-	// wait up to self.StopWaitSeconds for process to disappear, otherwise
-	// kill-9 it.  wait for MaxProcessKillWaitTime, then FATAL it
+	if self.command != nil && self.command.Process != nil {
+		var signal os.Signal
 
-	self.commandIsRunning = false
+		if force {
+			signal = os.Kill
+		} else {
+			signal = self.StopSignal.Signal()
+		}
+
+		// send the requested signal to the process
+		if err := self.command.Process.Signal(signal); err == nil {
+			processExited := make(chan bool)
+
+			// wait for the signal to be dealt with
+			go func() {
+				self.command.Process.Wait()
+				processExited <- true
+			}()
+
+			// wait for signal acknowledgment or timeout
+			select {
+			case <-processExited:
+				break
+			case <-time.After(time.Duration(self.StopWaitSeconds) * time.Second):
+				if !force {
+					self.killProcess(true)
+				}
+			}
+
+			self.commandIsRunning = false
+		}
+	}
+
 	return nil
 }

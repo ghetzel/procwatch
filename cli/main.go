@@ -48,5 +48,21 @@ func main() {
 		}
 	}
 
+	// app.Commands = []cli.Command{
+	// 	{
+	// 		Name: `status`,
+	// 		Usage: `Show the current status of all registered processes.`,
+	// 		Flags: []cli.Flag{
+	// 			cli.IntFlag{
+	// 				Name: `refresh-interval, i`,
+	// 				Usage: `How frequently to refresh the status output (0 to disable).`,
+	// 			},
+	// 		},
+	// 		Action: func(c *cli.Context) {
+
+	// 		},
+	// 	},
+	// }
+
 	app.Run(os.Args)
 }

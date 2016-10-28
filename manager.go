@@ -118,14 +118,14 @@ func (self *Manager) GetProgramsByState(states ...ProgramState) []*Program {
 }
 
 func (self *Manager) pushEvent(names []string, sourceType EventSource, source interface{}, args ...string) {
-	self.Events <- NewEvent(names, sourceType, source, args...)
+	self.Events <- NewEvent(names, `MANAGER`, sourceType, source, args...)
 }
 
-func (self *Manager) pushProcessStateEvent(state ProgramState, source interface{}, err error, args ...string) {
+func (self *Manager) pushProcessStateEvent(state ProgramState, source *Program, err error, args ...string) {
 	event := NewEvent([]string{
 		`PROCESS_STATE`,
 		fmt.Sprintf("PROCESS_STATE_%s", state.String()),
-	}, ProgramSource, source, args...)
+	}, source.Name, ProgramSource, source, args...)
 
 	event.Error = err
 	self.Events <- event

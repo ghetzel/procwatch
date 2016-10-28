@@ -23,6 +23,7 @@ func (self EventSource) String() string {
 
 type Event struct {
 	Names      []string
+	Label      string
 	Timestamp  time.Time
 	Error      error
 	Arguments  []string
@@ -30,9 +31,10 @@ type Event struct {
 	Source     interface{}
 }
 
-func NewEvent(names []string, sourceType EventSource, source interface{}, args ...string) *Event {
+func NewEvent(names []string, label string, sourceType EventSource, source interface{}, args ...string) *Event {
 	return &Event{
 		Names:      names,
+		Label:      label,
 		Timestamp:  time.Now(),
 		Arguments:  args,
 		SourceType: sourceType,
@@ -41,10 +43,9 @@ func NewEvent(names []string, sourceType EventSource, source interface{}, args .
 }
 
 func (self *Event) String() string {
-	return fmt.Sprintf("[%s] %s%s",
-		self.SourceType.String(),
-		strings.Join(self.Names, `,`),
-		self.sourceDetail())
+	return fmt.Sprintf("[%s] %s",
+		self.Label,
+		strings.Join(self.Names, `,`))
 }
 
 func (self *Event) sourceDetail() string {
