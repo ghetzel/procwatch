@@ -1,0 +1,17 @@
+vendors:
+- path: github.com/ghetzel/cli
+  rev: 4733699ce30faa633c4db36ebfbe427963593d7d
+- path: github.com/go-ini/ini
+  rev: 2ba15ac2dc9cdf88c110ec2dc0ced7fa45f5678c
+- path: github.com/gopherjs/gopherjs
+  rev: e34a5cd6a1bc7c4fde759f2d3039852fc68b5fcc
+- path: github.com/jtolds/gls
+  rev: 8ddce2a84170772b95dd5d576c48d517b22cac63
+- path: github.com/mattn/go-shellwords
+  rev: 525bedee691b5a8df547cb5cf9f86b7fb1883e24
+- path: github.com/op/go-logging
+  rev: 970db520ece77730c7e4724c61121037378659d9
+- path: github.com/smartystreets/assertions
+  rev: e60cfa771e3f4d18723a4119f1833898c9c62066
+- path: github.com/smartystreets/goconvey
+  rev: 3c2572876754c4669ae7417b219f0b30a29b32c7

@@ -1,24 +1,24 @@
-.PHONY: test
+.PHONY: test vendor
 
 all: vendor fmt build
 
 update:
-	test -d vendor && rm -rf vendor || exit 0
-	glide up --strip-vcs --update-vendored
+		-rm -rf vendor
+		govend -u -v -l
 
 vendor:
-	go list github.com/Masterminds/glide
-	glide install --strip-vcs --update-vendored
+		go list github.com/govend/govend
+		echo 'Verifying dependencies:'
+		govend -v
 
 clean:
-	rm -rf vendor bin
+		rm -rf vendor bin
 
 fmt:
 	gofmt -w .
 
 test:
-	# go test -v .
-	go test -v ./scanner
+	go test -v ./
 
 build: fmt
 	go build -o bin/`basename ${PWD}` cli/*.go
