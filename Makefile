@@ -21,5 +21,6 @@ test:
 	go test -v ./
 
 build: fmt
-	go build -o bin/`basename ${PWD}` cli/*.go
+	go build -o bin/`basename ${PWD}` cli/main.go
+	go build -o bin/procwatch-tester cli/tester.go
 

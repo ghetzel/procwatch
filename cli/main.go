@@ -32,6 +32,14 @@ func main() {
 	}
 
 	app.Before = func(c *cli.Context) error {
+		logging.SetFormatter(logging.MustStringFormatter(`%{color}%{level:.4s}%{color:reset}[%{id:04d}] %{message}`))
+
+		if level, err := logging.LogLevel(c.String(`log-level`)); err == nil {
+			logging.SetLevel(level, ``)
+		} else {
+			return err
+		}
+
 		log.Infof("Starting %s %s", c.App.Name, c.App.Version)
 		return nil
 	}
@@ -40,9 +48,7 @@ func main() {
 		manager := procwatch.NewManager(c.String(`config`))
 
 		if err := manager.Initialize(); err == nil {
-			if err := manager.Run(); err != nil {
-				log.Fatalf("Failed to start procwatch manager: %v", err)
-			}
+			manager.Run()
 		} else {
 			log.Fatal(err)
 		}

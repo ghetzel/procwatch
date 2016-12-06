@@ -11,15 +11,18 @@ import (
 var log = logging.MustGetLogger(`procwatch`)
 
 type Manager struct {
-	ConfigFile string
-	Programs   map[string]*Program
-	Events     chan *Event
+	ConfigFile          string
+	Events              chan *Event
+	programs            map[string]*Program
+	stopping            bool
+	lastError           error
+	eventHandlerRunning bool
 }
 
 func NewManager(configFile string) *Manager {
 	return &Manager{
 		ConfigFile: configFile,
-		Programs:   make(map[string]*Program),
+		programs:   make(map[string]*Program),
 		Events:     make(chan *Event),
 	}
 }
@@ -28,12 +31,12 @@ func (self *Manager) Initialize() error {
 	if data, err := ioutil.ReadFile(self.ConfigFile); err == nil {
 		if loaded, err := LoadProgramsFromConfig(data, self); err == nil {
 			for name, program := range loaded {
-				if _, ok := self.Programs[name]; ok {
+				if _, ok := self.programs[name]; ok {
 					return fmt.Errorf("Cannot load program %d from file %s: a program named '%s' was already loaded.",
 						program.LoadIndex, self.ConfigFile, name)
 				}
 
-				self.Programs[name] = program
+				self.programs[name] = program
 			}
 		}
 	} else {
@@ -43,13 +46,14 @@ func (self *Manager) Initialize() error {
 	return nil
 }
 
-func (self *Manager) Run() error {
+func (self *Manager) Run() {
+	self.stopping = false
 	go self.startEventLogger()
 
 	for {
 		var checkLock sync.WaitGroup
 
-		for _, program := range self.Programs {
+		for _, program := range self.programs {
 			checkLock.Add(1)
 			go self.checkProgramState(program, &checkLock)
 		}
@@ -57,8 +61,23 @@ func (self *Manager) Run() error {
 		// wait for all program checks to be complete for this iteration
 		checkLock.Wait()
 
+		// if we're stopping the manager, and if all the programs are in a terminal state, quit the loop
+		if self.stopping {
+			if len(self.GetProgramsByState(ProgramStopped, ProgramExited, ProgramFatal)) == len(self.programs) {
+				return
+			}
+		}
+
 		time.Sleep(500 * time.Millisecond)
 	}
+}
+
+func (self *Manager) Stop() {
+	for _, program := range self.programs {
+		program.Stop()
+	}
+
+	self.stopping = true
 }
 
 // Process Management States
@@ -103,10 +122,15 @@ func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGro
 	checkLock.Done()
 }
 
+func (self *Manager) Program(name string) (*Program, bool) {
+	program, ok := self.programs[name]
+	return program, ok
+}
+
 func (self *Manager) GetProgramsByState(states ...ProgramState) []*Program {
 	programs := make([]*Program, 0)
 
-	for _, program := range self.Programs {
+	for _, program := range self.programs {
 		for _, state := range states {
 			if program.State == state {
 				programs = append(programs, program)
@@ -132,7 +156,18 @@ func (self *Manager) pushProcessStateEvent(state ProgramState, source *Program, 
 }
 
 func (self *Manager) startEventLogger() {
+	if self.eventHandlerRunning {
+		return
+	}
+
+	self.eventHandlerRunning = true
+
 	for {
+		if self.stopping {
+			self.eventHandlerRunning = false
+			break
+		}
+
 		select {
 		case event := <-self.Events:
 			log.Debug(event.String())
