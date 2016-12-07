@@ -5,6 +5,7 @@ import (
 	"github.com/op/go-logging"
 	"os"
 	"os/signal"
+	"time"
 )
 
 var log = logging.MustGetLogger(`main`)
@@ -23,14 +24,18 @@ func main() {
 			Value: `tester.pid`,
 		},
 		cli.IntFlag{
-			Name:  `exit-status, E`,
+			Name:  `exit-status, s`,
 			Usage: `The status that a successfully-terminated process will exit with`,
+		},
+		cli.DurationFlag{
+			Name:  `exit-after, t`,
+			Usage: `How long to wait before exiting.  If not set, process will run until explicitly terminated.`,
 		},
 	}
 
 	app.Before = func(c *cli.Context) error {
 		logging.SetFormatter(logging.MustStringFormatter(`%{color}%{level:.4s}%{color:reset}[%{id:04d}] %{message}`))
-		logging.SetLevel(logging.DebugLevel, ``)
+		logging.SetLevel(logging.DEBUG, ``)
 
 		log.Infof("Starting %s %s", c.App.Name, c.App.Version)
 		return nil
@@ -46,10 +51,14 @@ func main() {
 			}
 		}()
 
-		if err := localPeer.Listen(); err != nil {
-			log.Fatal(err)
+		if exitAfter := c.Duration(`exit-after`); exitAfter == 0 {
+			select {}
+		} else {
+			select {
+			case <-time.After(exitAfter):
+				os.Exit(c.Int(`exit-status`))
+			}
 		}
-		select {}
 	}
 
 	app.Run(os.Args)

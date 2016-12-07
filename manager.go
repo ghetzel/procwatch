@@ -10,11 +10,15 @@ import (
 
 var log = logging.MustGetLogger(`procwatch`)
 
+type EventHandler func(*Event)
+
 type Manager struct {
 	ConfigFile          string
 	Events              chan *Event
+	eventHandlers       []EventHandler
 	programs            map[string]*Program
 	stopping            bool
+	doneStopping        chan error
 	lastError           error
 	eventHandlerRunning bool
 }
@@ -22,8 +26,10 @@ type Manager struct {
 func NewManager(configFile string) *Manager {
 	return &Manager{
 		ConfigFile: configFile,
-		programs:   make(map[string]*Program),
 		Events:     make(chan *Event),
+		programs:   make(map[string]*Program),
+		eventHandlers: make(      []EventHandler, 0),
+		doneStopping: make(chan error),
 	}
 }
 
@@ -63,21 +69,47 @@ func (self *Manager) Run() {
 
 		// if we're stopping the manager, and if all the programs are in a terminal state, quit the loop
 		if self.stopping {
-			if len(self.GetProgramsByState(ProgramStopped, ProgramExited, ProgramFatal)) == len(self.programs) {
-				return
+			shouldBreak := true
+
+			for _, p := range self.programs {
+				if !p.InTerminalState() {
+					shouldBreak = false
+					break
+				}
+			}
+
+			// break out of the mainloop, which will send the terminate signal
+			if shouldBreak {
+				break
 			}
 		}
 
 		time.Sleep(500 * time.Millisecond)
 	}
+
+	log.Infof("All programs stopped, stopping manager...")
+	self.doneStopping <- nil
 }
 
-func (self *Manager) Stop() {
+func (self *Manager) Stop() error {
 	for _, program := range self.programs {
-		program.Stop()
+		if !program.InTerminalState() {
+			program.Stop()
+		}
 	}
 
 	self.stopping = true
+
+	select {
+	case err := <-self.doneStopping:
+		return err
+	}
+
+	return fmt.Errorf("Manager stopped prematurely")
+}
+
+func (self *Manager) AddEventHandler(handler EventHandler) {
+	self.eventHandlers = append(self.eventHandlers, handler)
 }
 
 // Process Management States
@@ -102,19 +134,29 @@ func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGro
 	case ProgramStopped:
 		// first-time start for autostart programs
 		if program.AutoStart && !program.HasEverBeenStarted() {
+			log.Debugf("[%s] Starting program for the first time", program.Name)
 			program.Start()
 		}
 
 	case ProgramExited:
 		// automatic restart of cleanly-exited programs
 		if program.ShouldAutoRestart() {
+			log.Debugf("[%s] Automatically restarting cleanly-exited program", program.Name)
 			program.Start()
 		}
 
 	case ProgramBackoff:
 		if program.ShouldAutoRestart() {
+			log.Debugf("[%s] Automatically restarting program after backoff (retry %d/%d)",
+				program.Name,
+				program.processRetryCount,
+				program.StartRetries)
 			program.Start()
 		} else {
+			log.Debugf("[%s] Marking program fatal after %d/%d retries",
+				program.Name,
+				program.processRetryCount,
+				program.StartRetries)
 			program.StopFatal()
 		}
 	}
@@ -174,6 +216,11 @@ func (self *Manager) startEventLogger() {
 
 			if event.Error != nil {
 				log.Error(event.Error)
+			}
+
+			// dispatch event to all registered handlers
+			for _, handler := range self.eventHandlers {
+				handler(event)
 			}
 		}
 	}

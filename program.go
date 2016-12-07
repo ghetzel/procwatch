@@ -215,6 +215,7 @@ func (self *Program) IsExpectedStatus(code int) bool {
 }
 
 func (self *Program) Start() {
+	self.hasEverBeenStarted = true
 	self.transitionTo(ProgramStarting)
 
 	// if process started successfully and stayed running for self.StartSeconds
@@ -246,6 +247,25 @@ func (self *Program) Stop() {
 func (self *Program) StopFatal() {
 	self.Stop()
 	self.transitionTo(ProgramFatal)
+}
+
+func (self *Program) PID() int {
+	if self.command != nil {
+		if self.command.Process != nil {
+			return self.command.Process.Pid
+		}
+	}
+
+	return -1
+}
+
+func (self *Program) InTerminalState() bool {
+	switch self.State {
+	case ProgramStopped, ProgramExited, ProgramFatal:
+		return true
+	}
+
+	return false
 }
 
 func (self *Program) transitionTo(state ProgramState) {

@@ -3,6 +3,7 @@ package procwatch
 import (
 	"fmt"
 	"strings"
+	"github.com/ghetzel/go-stockutil/sliceutil"
 	"time"
 )
 
@@ -46,6 +47,10 @@ func (self *Event) String() string {
 	return fmt.Sprintf("[%s] %s",
 		self.Label,
 		strings.Join(self.Names, `,`))
+}
+
+func (self *Event) HasName(name string) bool {
+	return sliceutil.ContainsString(self.Names, name)
 }
 
 func (self *Event) sourceDetail() string {
