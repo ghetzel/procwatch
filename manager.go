@@ -25,11 +25,11 @@ type Manager struct {
 
 func NewManager(configFile string) *Manager {
 	return &Manager{
-		ConfigFile: configFile,
-		Events:     make(chan *Event),
-		programs:   make(map[string]*Program),
-		eventHandlers: make(      []EventHandler, 0),
-		doneStopping: make(chan error),
+		ConfigFile:    configFile,
+		Events:        make(chan *Event),
+		programs:      make(map[string]*Program),
+		eventHandlers: make([]EventHandler, 0),
+		doneStopping:  make(chan error),
 	}
 }
 

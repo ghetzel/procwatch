@@ -2,8 +2,8 @@ package procwatch
 
 import (
 	"fmt"
-	"strings"
 	"github.com/ghetzel/go-stockutil/sliceutil"
+	"strings"
 	"time"
 )
 

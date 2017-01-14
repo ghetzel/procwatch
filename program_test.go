@@ -15,28 +15,28 @@ func newManager(config string) (*Manager, error) {
 	actualStates = nil
 
 	if err := manager.Initialize(); err == nil {
-		manager.AddEventHandler(func(event *Event){
+		manager.AddEventHandler(func(event *Event) {
 			if event.HasName(`PROCESS_STATE_STOPPED`) {
 				actualStates = append(actualStates, ProgramStopped)
-			}else if event.HasName(`PROCESS_STATE_STARTING`) {
+			} else if event.HasName(`PROCESS_STATE_STARTING`) {
 				actualStates = append(actualStates, ProgramStarting)
-			}else if event.HasName(`PROCESS_STATE_RUNNING`) {
+			} else if event.HasName(`PROCESS_STATE_RUNNING`) {
 				actualStates = append(actualStates, ProgramRunning)
-			}else if event.HasName(`PROCESS_STATE_BACKOFF`) {
+			} else if event.HasName(`PROCESS_STATE_BACKOFF`) {
 				actualStates = append(actualStates, ProgramBackoff)
-			}else if event.HasName(`PROCESS_STATE_STOPPING`) {
+			} else if event.HasName(`PROCESS_STATE_STOPPING`) {
 				actualStates = append(actualStates, ProgramStopping)
-			}else if event.HasName(`PROCESS_STATE_EXITED`) {
+			} else if event.HasName(`PROCESS_STATE_EXITED`) {
 				actualStates = append(actualStates, ProgramExited)
-			}else if event.HasName(`PROCESS_STATE_FATAL`) {
+			} else if event.HasName(`PROCESS_STATE_FATAL`) {
 				actualStates = append(actualStates, ProgramFatal)
-			}else {
+			} else {
 				actualStates = append(actualStates, ProgramUnknown)
 			}
 		})
 
 		return manager, nil
-	}else{
+	} else {
 		return manager, err
 	}
 }
@@ -112,7 +112,6 @@ func TestFatalProgramLifecycle(t *testing.T) {
 		ProgramFatal,
 	}, actualStates)
 }
-
 
 func TestFatalAutorestartProgramLifecycle(t *testing.T) {
 	assert := require.New(t)
