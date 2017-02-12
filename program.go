@@ -99,7 +99,6 @@ type Program struct {
 	hasEverBeenStarted    bool
 	lastExitStatus        int
 	lastStartedAt         time.Time
-	commandIsRunning      bool
 	commandRunLock        sync.Mutex
 	stateLock             sync.RWMutex
 }
@@ -166,6 +165,12 @@ func (self *Program) GetState() ProgramState {
 	return self.state
 }
 
+func (self *Program) GetCommand() *exec.Cmd {
+	self.commandRunLock.Lock()
+	defer self.commandRunLock.Unlock()
+	return self.command
+}
+
 func (self *Program) HasEverBeenStarted() bool {
 	return self.hasEverBeenStarted
 }
@@ -205,32 +210,35 @@ func (self *Program) IsExpectedStatus(code int) bool {
 }
 
 func (self *Program) Start() {
-	self.hasEverBeenStarted = true
-	self.transitionTo(ProgramStarting)
+	if self.GetCommand() == nil {
+		self.hasEverBeenStarted = true
+		self.transitionTo(ProgramStarting)
 
-	// if process started successfully and stayed running for self.StartSeconds
-	if err := self.startProcess(); err == nil {
-		self.transitionTo(ProgramRunning)
-	} else {
-		self.killProcess(false)
-
-		if self.ShouldAutoRestart() {
-			self.transitionTo(ProgramBackoff)
+		// if process started successfully and stayed running for self.StartSeconds
+		if err := self.startProcess(); err == nil {
+			self.transitionTo(ProgramRunning)
 		} else {
 			self.killProcess(false)
-			self.transitionTo(ProgramFatal)
+
+			if self.ShouldAutoRestart() {
+				self.transitionTo(ProgramBackoff)
+			} else {
+				self.transitionTo(ProgramFatal)
+			}
 		}
 	}
 }
 
 func (self *Program) Stop() {
-	self.transitionTo(ProgramStopping)
-	self.processRetryCount = 0
+	if self.GetCommand() != nil {
+		self.transitionTo(ProgramStopping)
+		self.processRetryCount = 0
 
-	if err := self.killProcess(false); err == nil {
-		self.transitionTo(ProgramStopped)
-	} else {
-		self.transitionTo(ProgramFatal)
+		if err := self.killProcess(false); err == nil {
+			self.transitionTo(ProgramStopped)
+		} else {
+			self.transitionTo(ProgramFatal)
+		}
 	}
 }
 
@@ -275,17 +283,9 @@ func (self *Program) transitionTo(state ProgramState) {
 }
 
 func (self *Program) startProcess() error {
-	if self.command != nil {
-		if err := self.killProcess(false); err != nil {
-			self.command = nil
-			self.transitionTo(ProgramFatal)
-			return err
-		}
+	if self.GetCommand() != nil {
+		return fmt.Errorf("[%s] Program already running", self.Name)
 	}
-
-	self.commandRunLock.Lock()
-	self.commandIsRunning = false
-	self.commandRunLock.Unlock()
 
 	shwords := shellwords.NewParser()
 	shwords.ParseEnv = true
@@ -305,10 +305,7 @@ func (self *Program) startProcess() error {
 
 				select {
 				case <-time.After(startDuration):
-					self.commandRunLock.Lock()
-					defer self.commandRunLock.Unlock()
-
-					if self.commandIsRunning {
+					if self.GetCommand() != nil {
 						return nil
 					} else {
 						return fmt.Errorf("Command did not stay running for %s", startDuration)
@@ -326,9 +323,9 @@ func (self *Program) startProcess() error {
 }
 
 func (self *Program) monitorProcessGetState() {
-	if self.command != nil {
+	if self.GetCommand() != nil {
 		// block until process exits and yields an exit status
-		if code, err := self.waitForProcessStatus(); err == nil {
+		if code, err := self.startProcessAndWaitForStatus(); err == nil {
 			// update the last known exit status
 			self.lastExitStatus = code
 
@@ -349,85 +346,75 @@ func (self *Program) monitorProcessGetState() {
 	}
 
 	self.commandRunLock.Lock()
-	defer self.commandRunLock.Unlock()
-	self.commandIsRunning = false
+	self.command = nil
+	self.commandRunLock.Unlock()
 }
 
-func (self *Program) waitForProcessStatus() (int, error) {
-	self.commandRunLock.Lock()
-	self.commandIsRunning = true
-	self.commandRunLock.Unlock()
+func (self *Program) startProcessAndWaitForStatus() (int, error) {
+	if command := self.GetCommand(); command != nil {
+		command.Wait()
+		processExitedAt := time.Now()
 
-	self.command.Wait()
-	processExitedAt := time.Now()
+		// loop until process fully exits and we have a status, or if we've exceeding the
+		// stopwait interval
+		for {
+			if self.command.ProcessState != nil {
+				psI := self.command.ProcessState.Sys()
 
-	// loop until process fully exits and we have a status, or if we've exceeding the
-	// stopwait interval
-	for {
-		if self.command.ProcessState != nil {
-			psI := self.command.ProcessState.Sys()
+				switch psI.(type) {
+				case syscall.WaitStatus:
+					ps := psI.(syscall.WaitStatus)
 
-			switch psI.(type) {
-			case syscall.WaitStatus:
-				ps := psI.(syscall.WaitStatus)
+					if ps.Exited() {
+						return ps.ExitStatus(), nil
+					} else if time.Since(processExitedAt) > (time.Duration(self.StopWaitSeconds) * time.Second) {
+						self.killProcess(true)
+						return -1, fmt.Errorf("Timed out waiting for process to exit gracefully")
+					} else {
+						time.Sleep(ProcessStateSettleInterval)
+					}
 
-				if ps.Exited() {
-					return ps.ExitStatus(), nil
-				} else if time.Since(processExitedAt) > (time.Duration(self.StopWaitSeconds) * time.Second) {
-					self.killProcess(true)
-					return -1, fmt.Errorf("Timed out waiting for process to exit gracefully")
-				} else {
-					time.Sleep(ProcessStateSettleInterval)
+				default:
+					return -1, fmt.Errorf("Unsupported process state structure %T", psI)
 				}
-
-			default:
-				return -1, fmt.Errorf("Unsupported process state structure %T", psI)
 			}
 		}
+	} else {
+		return -1, fmt.Errorf("[%s] Program already running", self.Name)
 	}
 }
 
 func (self *Program) killProcess(force bool) error {
-	if self.command != nil && self.command.Process != nil {
-		var signal os.Signal
+	if command := self.GetCommand(); command != nil {
+		if command.Process != nil {
+			var signal os.Signal
 
-		if force {
-			signal = os.Kill
-		} else {
-			signal = self.StopSignal.Signal()
-		}
-
-		log.Debugf("[%s] kill with %v", self.Name, signal)
-
-		// send the requested signal to the process
-		if err := self.command.Process.Signal(signal); err == nil {
-			processExited := make(chan bool)
-
-			log.Debugf("[%s] send signal", self.Name)
-
-			// wait for the signal to be dealt with
-			go func() {
-				self.command.Process.Wait()
-				processExited <- true
-			}()
-
-			log.Debugf("[%s] waiting for exit or timeout", self.Name)
-
-			// wait for signal acknowledgment or timeout
-			select {
-			case <-processExited:
-				break
-			case <-time.After(time.Duration(self.StopWaitSeconds) * time.Second):
-				if !force {
-					self.killProcess(true)
-				}
+			if force {
+				signal = os.Kill
+			} else {
+				signal = self.StopSignal.Signal()
 			}
 
-			log.Debugf("[%s] set commandIsRunning = false", self.Name)
+			// send the requested signal to the process
+			if err := command.Process.Signal(signal); err == nil {
+				processExited := make(chan bool)
 
-			self.commandRunLock.Lock()
-			self.commandIsRunning = false
-			self.commandRunLock.Unlock()
+				// wait for the signal to be dealt with
+				go func() {
+					command.Process.Wait()
+					processExited <- true
+				}()
+
+				// wait for signal acknowledgment or timeout
+				select {
+				case <-processExited:
+					break
+				case <-time.After(time.Duration(self.StopWaitSeconds) * time.Second):
+					if !force {
+						self.killProcess(true)
+					}
+				}
+			}
 		}
 	}
 

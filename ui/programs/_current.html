@@ -17,14 +17,14 @@ bindings:
       </tr>
     </thead>
     <tbody>
-      {{ range $name, $program := .bindings.programs }}
+      {{ range .bindings.programs }}
       <tr>
         <td class="col-sm-2">{{ .State }}</td>
-        <td class="col-sm-6">{{ $name }}</td>
+        <td class="col-sm-6">{{ .Name }}</td>
         <td class="col-sm-4">
             <button
                 class="btn btn-sm btn-success"
-                onclick="procwatch.actionProgram('{{ $name }}', 'start')"
+                onclick="procwatch.actionProgram('{{ .Name }}', 'start')"
                 href="#"
                 {{ if eq .State "RUNNING" }}disabled="disabled"{{ end }}
             >
@@ -33,7 +33,7 @@ bindings:
 
             <button
                 class="btn btn-sm btn-warning"
-                onclick="procwatch.actionProgram('{{ $name }}', 'restart')"
+                onclick="procwatch.actionProgram('{{ .Name }}', 'restart')"
                 href="#"
                 {{ if ne .State "RUNNING" }}disabled="disabled"{{ end }}
             >
@@ -42,7 +42,7 @@ bindings:
 
             <button
                 class="btn btn-sm btn-danger"
-                onclick="procwatch.actionProgram('{{ $name }}', 'stop')"
+                onclick="procwatch.actionProgram('{{ .Name }}', 'stop')"
                 href="#"
                 {{ if ne .State "RUNNING" }}disabled="disabled"{{ end }}
             >

@@ -67,6 +67,9 @@ $(function(){
         actionProgram: function(name, action){
             $.ajax('/api/programs/'+name+'/action/'+action, {
                 method: 'PUT',
+                success: function(){
+                    location.reload();
+                },
             })
         },
 

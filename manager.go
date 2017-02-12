@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/go-ini/ini"
 	"io/ioutil"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -15,12 +16,11 @@ type Manager struct {
 	Events              chan *Event `json:"-"`
 	Server              *Server
 	eventHandlers       []EventHandler
-	programs            map[string]*Program
+	programs            []*Program
 	stopping            bool
 	doneStopping        chan error
 	lastError           error
 	eventHandlerRunning bool
-	programLock         sync.RWMutex
 	stopLock            sync.Mutex
 }
 
@@ -28,7 +28,7 @@ func NewManager(configFile string) *Manager {
 	return &Manager{
 		ConfigFile:    configFile,
 		Events:        make(chan *Event),
-		programs:      make(map[string]*Program),
+		programs:      make([]*Program, 0),
 		eventHandlers: make([]EventHandler, 0),
 		doneStopping:  make(chan error),
 	}
@@ -41,19 +41,8 @@ func (self *Manager) Initialize() error {
 		}
 
 		if loaded, err := LoadProgramsFromConfig(data, self); err == nil {
-			for name, program := range loaded {
-				self.programLock.RLock()
-
-				if _, ok := self.programs[name]; ok {
-					return fmt.Errorf("Cannot load program %d from file %s: a program named '%s' was already loaded.",
-						program.LoadIndex, self.ConfigFile, name)
-				}
-
-				self.programLock.RUnlock()
-
-				self.programLock.Lock()
-				self.programs[name] = program
-				self.programLock.Unlock()
+			for _, program := range loaded {
+				self.programs = append(self.programs, program)
 			}
 		}
 
@@ -79,16 +68,14 @@ func (self *Manager) Run() {
 	go self.startEventLogger()
 
 	for {
-		var checkLock sync.WaitGroup
+		log.Debugf("Startloop GOROUTINES=%d", runtime.NumGoroutine())
 
-		self.programLock.RLock()
+		var checkLock sync.WaitGroup
 
 		for _, program := range self.programs {
 			checkLock.Add(1)
 			go self.checkProgramState(program, &checkLock)
 		}
-
-		self.programLock.RUnlock()
 
 		// wait for all program checks to be complete for this iteration
 		checkLock.Wait()
@@ -101,16 +88,12 @@ func (self *Manager) Run() {
 		if isStopping {
 			shouldBreak := true
 
-			self.programLock.RLock()
-
 			for _, p := range self.programs {
 				if !p.InTerminalState() {
 					shouldBreak = false
 					break
 				}
 			}
-
-			self.programLock.RUnlock()
 
 			// break out of the mainloop, which will send the terminate signal
 			if shouldBreak {
@@ -126,15 +109,11 @@ func (self *Manager) Run() {
 }
 
 func (self *Manager) Stop() error {
-	self.programLock.RLock()
-
 	for _, program := range self.programs {
 		if !program.InTerminalState() {
 			program.Stop()
 		}
 	}
-
-	self.programLock.RUnlock()
 
 	self.stopLock.Lock()
 	self.stopping = true
@@ -204,25 +183,22 @@ func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGro
 	checkLock.Done()
 }
 
-func (self *Manager) Programs() map[string]*Program {
-	self.programLock.RLock()
-	defer self.programLock.RUnlock()
+func (self *Manager) Programs() []*Program {
 	return self.programs
 }
 
 func (self *Manager) Program(name string) (*Program, bool) {
-	self.programLock.RLock()
-	defer self.programLock.RUnlock()
+	for _, program := range self.programs {
+		if program.Name == name {
+			return program, true
+		}
+	}
 
-	program, ok := self.programs[name]
-	return program, ok
+	return nil, false
 }
 
 func (self *Manager) GetProgramsByState(states ...ProgramState) []*Program {
 	programs := make([]*Program, 0)
-
-	self.programLock.RLock()
-	defer self.programLock.RUnlock()
 
 	for _, program := range self.programs {
 		for _, state := range states {
