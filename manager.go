@@ -2,9 +2,11 @@ package procwatch
 
 import (
 	"fmt"
+	"github.com/ghetzel/go-stockutil/sliceutil"
 	"github.com/go-ini/ini"
-	"github.com/sasha-s/go-deadlock"
 	"io/ioutil"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,6 +16,8 @@ type EventHandler func(*Event)
 type Manager struct {
 	ConfigFile          string
 	Events              chan *Event `json:"-"`
+	includes            []string
+	loadedConfigs       []string
 	Server              *Server
 	eventHandlers       []EventHandler
 	programs            []*Program
@@ -21,7 +25,7 @@ type Manager struct {
 	doneStopping        chan error
 	lastError           error
 	eventHandlerRunning bool
-	stopLock            deadlock.Mutex
+	stopLock            sync.Mutex
 }
 
 func NewManager(configFile string) *Manager {
@@ -31,11 +35,49 @@ func NewManager(configFile string) *Manager {
 		programs:      make([]*Program, 0),
 		eventHandlers: make([]EventHandler, 0),
 		doneStopping:  make(chan error),
+		includes:      make([]string, 0),
+		loadedConfigs: make([]string, 0),
 	}
 }
 
 func (self *Manager) Initialize() error {
-	if data, err := ioutil.ReadFile(self.ConfigFile); err == nil {
+	if err := self.loadConfigFromFile(self.ConfigFile); err != nil {
+		return err
+	}
+
+	for _, include := range self.includes {
+		if matches, err := filepath.Glob(include); err == nil {
+			for _, includedConfig := range matches {
+				if sliceutil.ContainsString(self.loadedConfigs, includedConfig) {
+					return fmt.Errorf("Already loaded configuration at %s", includedConfig)
+				}
+
+				if err := self.loadConfigFromFile(includedConfig); err == nil {
+					self.loadedConfigs = append(self.loadedConfigs, includedConfig)
+				} else {
+					return err
+				}
+			}
+		} else {
+			return err
+		}
+	}
+
+	if self.Server != nil {
+		if err := self.Server.Initialize(self); err == nil {
+			go self.Server.Start()
+		} else {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (self *Manager) loadConfigFromFile(filename string) error {
+	log.Infof("Loading configuration file: %s", filename)
+
+	if data, err := ioutil.ReadFile(filename); err == nil {
 		if err := LoadGlobalConfig(data, self); err != nil {
 			return err
 		}
@@ -43,14 +85,6 @@ func (self *Manager) Initialize() error {
 		if loaded, err := LoadProgramsFromConfig(data, self); err == nil {
 			for _, program := range loaded {
 				self.programs = append(self.programs, program)
-			}
-		}
-
-		if self.Server != nil {
-			if err := self.Server.Initialize(self); err == nil {
-				go self.Server.Start()
-			} else {
-				return err
 			}
 		}
 	} else {
@@ -268,6 +302,14 @@ func LoadGlobalConfig(data []byte, manager *Manager) error {
 
 					if err := section.MapTo(manager.Server); err != nil {
 						return err
+					}
+				}
+
+			case `include`:
+				if key := section.Key(`files`); key != nil {
+					if value := key.MustString(``); value != `` {
+						fileGlobs := strings.Split(value, `,`)
+						manager.includes = append(manager.includes, fileGlobs...)
 					}
 				}
 			}

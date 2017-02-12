@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"github.com/go-ini/ini"
 	"github.com/mattn/go-shellwords"
-	"github.com/sasha-s/go-deadlock"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -99,8 +99,8 @@ type Program struct {
 	hasEverBeenStarted    bool
 	lastExitStatus        int
 	lastStartedAt         time.Time
-	commandRunLock        deadlock.RWMutex
-	stateLock             deadlock.RWMutex
+	commandRunLock        sync.RWMutex
+	stateLock             sync.RWMutex
 }
 
 func LoadProgramsFromConfig(data []byte, manager *Manager) (map[string]*Program, error) {
