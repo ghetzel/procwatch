@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/negroni"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var DefaultAddress = `:9001`
@@ -39,7 +40,7 @@ func (self *Server) Start() error {
 		uiDir = `/`
 	}
 
-	server := negroni.New()
+	serverHandler := negroni.New()
 	router := vestigo.NewRouter()
 	ui := diecast.NewServer(uiDir, `*.html`)
 
@@ -83,27 +84,14 @@ func (self *Server) Start() error {
 		if program, ok := self.manager.Program(name); ok {
 			switch action {
 			case `start`:
-				switch program.GetState() {
-				case ProgramStopped, ProgramFatal:
-					program.Start()
-				}
+				program.Start()
 
 			case `stop`:
-				switch program.GetState() {
-				case ProgramStarting, ProgramRunning:
-					program.Stop()
-				}
+				program.Stop()
 
 			case `restart`:
-				switch program.GetState() {
-				case ProgramStarting, ProgramRunning:
-					program.Stop()
-				}
-
-				switch program.GetState() {
-				case ProgramStopped, ProgramFatal:
-					program.Start()
-				}
+				program.Stop()
+				program.Start()
 
 			default:
 				http.Error(w, fmt.Sprintf("Unknown action '%s'", action), http.StatusBadRequest)
@@ -115,12 +103,19 @@ func (self *Server) Start() error {
 		}
 	})
 
-	server.UseHandler(router)
+	serverHandler.UseHandler(router)
 
 	log.Infof("Running API server at %s", self.Address)
-	server.Run(self.Address)
 
-	return nil
+	server := &http.Server{
+		Addr:           self.Address,
+		Handler:        serverHandler,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	return server.ListenAndServe()
 }
 
 func Respond(w http.ResponseWriter, data interface{}) {

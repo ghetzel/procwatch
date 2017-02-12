@@ -3,8 +3,8 @@ package procwatch
 import (
 	"fmt"
 	"github.com/go-ini/ini"
+	"github.com/sasha-s/go-deadlock"
 	"io/ioutil"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -21,7 +21,7 @@ type Manager struct {
 	doneStopping        chan error
 	lastError           error
 	eventHandlerRunning bool
-	stopLock            sync.Mutex
+	stopLock            deadlock.Mutex
 }
 
 func NewManager(configFile string) *Manager {
@@ -68,8 +68,6 @@ func (self *Manager) Run() {
 	go self.startEventLogger()
 
 	for {
-		log.Debugf("Startloop GOROUTINES=%d", runtime.NumGoroutine())
-
 		var checkLock sync.WaitGroup
 
 		for _, program := range self.programs {
@@ -201,8 +199,10 @@ func (self *Manager) GetProgramsByState(states ...ProgramState) []*Program {
 	programs := make([]*Program, 0)
 
 	for _, program := range self.programs {
+		currentState := program.GetState()
+
 		for _, state := range states {
-			if program.GetState() == state {
+			if currentState == state {
 				programs = append(programs, program)
 			}
 		}
