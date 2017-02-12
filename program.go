@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -14,17 +15,17 @@ import (
 const MaxProcessKillWaitTime = (5 * time.Second)
 const ProcessStateSettleInterval = (250 * time.Millisecond)
 
-type ProgramState int
+type ProgramState string
 
 const (
-	ProgramStopped  ProgramState = 0
-	ProgramStarting              = 10
-	ProgramRunning               = 20
-	ProgramBackoff               = 30
-	ProgramStopping              = 40
-	ProgramExited                = 100
-	ProgramFatal                 = 200
-	ProgramUnknown               = 1000
+	ProgramStopped  ProgramState = `STOPPED`
+	ProgramStarting              = `STARTING`
+	ProgramRunning               = `RUNNING`
+	ProgramBackoff               = `BACKOFF`
+	ProgramStopping              = `STOPPING`
+	ProgramExited                = `EXITED`
+	ProgramFatal                 = `FATAL`
+	ProgramUnknown               = `UNKNOWN`
 )
 
 type ProgramSignal string
@@ -58,31 +59,9 @@ func (self ProgramSignal) Signal() os.Signal {
 	}
 }
 
-func (self ProgramState) String() string {
-	switch self {
-	case ProgramStopped:
-		return `STOPPED`
-	case ProgramStarting:
-		return `STARTING`
-	case ProgramRunning:
-		return `RUNNING`
-	case ProgramBackoff:
-		return `BACKOFF`
-	case ProgramStopping:
-		return `STOPPING`
-	case ProgramExited:
-		return `EXITED`
-	case ProgramFatal:
-		return `FATAL`
-	default:
-		return `UNKNOWN`
-	}
-}
-
 type Program struct {
 	Name                  string        `ini:"-"`
 	LoadIndex             int           `ini:"-"`
-	State                 ProgramState  `ini:"-"`
 	Command               string        `ini:"command"`
 	ProcessName           string        `ini:"process_name,omitempty"`
 	NumProcs              int           `ini:"numprocs,omitempty"`
@@ -112,6 +91,7 @@ type Program struct {
 	StderrEventsEnabled   bool          `ini:"stderr_events_enabled,omitempty"`
 	Environment           []string      `ini:"environment,omitempty" delim:","`
 	ServerUrl             string        `ini:"serverurl,omitempty"`
+	state                 ProgramState
 	processRetryCount     int
 	manager               *Manager
 	command               *exec.Cmd
@@ -119,6 +99,8 @@ type Program struct {
 	lastExitStatus        int
 	lastStartedAt         time.Time
 	commandIsRunning      bool
+	commandRunLock        sync.Mutex
+	stateLock             sync.RWMutex
 }
 
 func LoadProgramsFromConfig(data []byte, manager *Manager) (map[string]*Program, error) {
@@ -152,7 +134,6 @@ func LoadProgramsFromConfig(data []byte, manager *Manager) (map[string]*Program,
 func NewProgram(name string, manager *Manager) *Program {
 	return &Program{
 		Name:                  name,
-		State:                 ProgramStopped,
 		ProcessName:           `%(program_name)s`,
 		NumProcs:              1,
 		Priority:              999,
@@ -170,10 +151,17 @@ func NewProgram(name string, manager *Manager) *Program {
 		StderrLogfileBackups:  10,
 		Environment:           make([]string, 0),
 		ServerUrl:             `AUTO`,
+		state:                 ProgramStopped,
 		manager:               manager,
 		lastExitStatus:        -1,
 		processRetryCount:     0,
 	}
+}
+
+func (self *Program) State() ProgramState {
+	self.stateLock.RLock()
+	defer self.stateLock.RUnlock()
+	return self.state
 }
 
 func (self *Program) HasEverBeenStarted() bool {
@@ -181,7 +169,7 @@ func (self *Program) HasEverBeenStarted() bool {
 }
 
 func (self *Program) ShouldAutoRestart() bool {
-	switch self.State {
+	switch self.State() {
 	case ProgramFatal, ProgramStopped:
 		return false
 	}
@@ -260,7 +248,7 @@ func (self *Program) PID() int {
 }
 
 func (self *Program) InTerminalState() bool {
-	switch self.State {
+	switch self.State() {
 	case ProgramStopped, ProgramExited, ProgramFatal:
 		return true
 	}
@@ -269,13 +257,16 @@ func (self *Program) InTerminalState() bool {
 }
 
 func (self *Program) transitionTo(state ProgramState) {
-	if self.State != state {
+	if self.State() != state {
 		switch state {
 		case ProgramBackoff:
 			self.processRetryCount += 1
 		}
 
-		self.State = state
+		self.stateLock.Lock()
+		self.state = state
+		self.stateLock.Unlock()
+
 		self.manager.pushProcessStateEvent(state, self, nil)
 	}
 }
@@ -289,7 +280,9 @@ func (self *Program) startProcess() error {
 		}
 	}
 
+	self.commandRunLock.Lock()
 	self.commandIsRunning = false
+	self.commandRunLock.Unlock()
 
 	shwords := shellwords.NewParser()
 	shwords.ParseEnv = true
@@ -309,6 +302,9 @@ func (self *Program) startProcess() error {
 
 				select {
 				case <-time.After(startDuration):
+					self.commandRunLock.Lock()
+					defer self.commandRunLock.Unlock()
+
 					if self.commandIsRunning {
 						return nil
 					} else {
@@ -349,11 +345,16 @@ func (self *Program) monitorProcessState() {
 		}
 	}
 
+	self.commandRunLock.Lock()
+	defer self.commandRunLock.Unlock()
 	self.commandIsRunning = false
 }
 
 func (self *Program) waitForProcessStatus() (int, error) {
+	self.commandRunLock.Lock()
 	self.commandIsRunning = true
+	self.commandRunLock.Unlock()
+
 	self.command.Wait()
 	processExitedAt := time.Now()
 
@@ -413,7 +414,9 @@ func (self *Program) killProcess(force bool) error {
 				}
 			}
 
+			self.commandRunLock.Lock()
 			self.commandIsRunning = false
+			self.commandRunLock.Unlock()
 		}
 	}
 

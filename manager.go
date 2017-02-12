@@ -2,25 +2,26 @@ package procwatch
 
 import (
 	"fmt"
-	"github.com/op/go-logging"
+	"github.com/go-ini/ini"
 	"io/ioutil"
 	"sync"
 	"time"
 )
 
-var log = logging.MustGetLogger(`procwatch`)
-
 type EventHandler func(*Event)
 
 type Manager struct {
 	ConfigFile          string
-	Events              chan *Event
+	Events              chan *Event `json:"-"`
+	Server              *Server
 	eventHandlers       []EventHandler
 	programs            map[string]*Program
 	stopping            bool
 	doneStopping        chan error
 	lastError           error
 	eventHandlerRunning bool
+	programLock         sync.RWMutex
+	stopLock            sync.Mutex
 }
 
 func NewManager(configFile string) *Manager {
@@ -35,14 +36,32 @@ func NewManager(configFile string) *Manager {
 
 func (self *Manager) Initialize() error {
 	if data, err := ioutil.ReadFile(self.ConfigFile); err == nil {
+		if err := LoadGlobalConfig(data, self); err != nil {
+			return err
+		}
+
 		if loaded, err := LoadProgramsFromConfig(data, self); err == nil {
 			for name, program := range loaded {
+				self.programLock.RLock()
+
 				if _, ok := self.programs[name]; ok {
 					return fmt.Errorf("Cannot load program %d from file %s: a program named '%s' was already loaded.",
 						program.LoadIndex, self.ConfigFile, name)
 				}
 
+				self.programLock.RUnlock()
+
+				self.programLock.Lock()
 				self.programs[name] = program
+				self.programLock.Unlock()
+			}
+		}
+
+		if self.Server != nil {
+			if err := self.Server.Initialize(self); err == nil {
+				go self.Server.Start()
+			} else {
+				return err
 			}
 		}
 	} else {
@@ -53,23 +72,36 @@ func (self *Manager) Initialize() error {
 }
 
 func (self *Manager) Run() {
+	self.stopLock.Lock()
 	self.stopping = false
+	self.stopLock.Unlock()
+
 	go self.startEventLogger()
 
 	for {
 		var checkLock sync.WaitGroup
+
+		self.programLock.RLock()
 
 		for _, program := range self.programs {
 			checkLock.Add(1)
 			go self.checkProgramState(program, &checkLock)
 		}
 
+		self.programLock.RUnlock()
+
 		// wait for all program checks to be complete for this iteration
 		checkLock.Wait()
 
 		// if we're stopping the manager, and if all the programs are in a terminal state, quit the loop
-		if self.stopping {
+		self.stopLock.Lock()
+		isStopping := self.stopping
+		self.stopLock.Unlock()
+
+		if isStopping {
 			shouldBreak := true
+
+			self.programLock.RLock()
 
 			for _, p := range self.programs {
 				if !p.InTerminalState() {
@@ -77,6 +109,8 @@ func (self *Manager) Run() {
 					break
 				}
 			}
+
+			self.programLock.RUnlock()
 
 			// break out of the mainloop, which will send the terminate signal
 			if shouldBreak {
@@ -92,13 +126,19 @@ func (self *Manager) Run() {
 }
 
 func (self *Manager) Stop() error {
+	self.programLock.RLock()
+
 	for _, program := range self.programs {
 		if !program.InTerminalState() {
 			program.Stop()
 		}
 	}
 
+	self.programLock.RUnlock()
+
+	self.stopLock.Lock()
 	self.stopping = true
+	self.stopLock.Unlock()
 
 	select {
 	case err := <-self.doneStopping:
@@ -117,20 +157,20 @@ func (self *Manager) AddEventHandler(handler EventHandler) {
 // STOPPED -> STARTING
 //          |- up for startsecs? -> RUNNING
 //          |                       |- manually stopped? -> STOPPING
-//          |                                               |- stopped in time? -> [STOPPED]
-//          |                                               \- no?              -> [FATAL]
+//          |                       |                       |- stopped in time? -> [STOPPED]
+//          |                       |                       \- no?              -> [FATAL]
 //          |                       \- process exited?   -> EXITED -> STARTING...
 //          |
 //          |- no?
-//          |   \- should restart? -> BACKOFF -> STARTING...
-//          |                      -> [FATAL]
+//          |  \- should restart? -> BACKOFF -> STARTING...
+//          |                     -> [FATAL]
 //          |
-//          \- manually stopped?   -> STOPPING
-//                                    |- stopped in time? -> [STOPPED]
-//                                    \- no?              -> [FATAL]
+//          \- manually stopped?  -> STOPPING
+//                                   |- stopped in time? -> [STOPPED]
+//                                   \- no?              -> [FATAL]
 //
 func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
-	switch program.State {
+	switch program.State() {
 	case ProgramStopped:
 		// first-time start for autostart programs
 		if program.AutoStart && !program.HasEverBeenStarted() {
@@ -164,7 +204,16 @@ func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGro
 	checkLock.Done()
 }
 
+func (self *Manager) Programs() map[string]*Program {
+	self.programLock.RLock()
+	defer self.programLock.RUnlock()
+	return self.programs
+}
+
 func (self *Manager) Program(name string) (*Program, bool) {
+	self.programLock.RLock()
+	defer self.programLock.RUnlock()
+
 	program, ok := self.programs[name]
 	return program, ok
 }
@@ -172,9 +221,12 @@ func (self *Manager) Program(name string) (*Program, bool) {
 func (self *Manager) GetProgramsByState(states ...ProgramState) []*Program {
 	programs := make([]*Program, 0)
 
+	self.programLock.RLock()
+	defer self.programLock.RUnlock()
+
 	for _, program := range self.programs {
 		for _, state := range states {
-			if program.State == state {
+			if program.State() == state {
 				programs = append(programs, program)
 			}
 		}
@@ -190,7 +242,7 @@ func (self *Manager) pushEvent(names []string, sourceType EventSource, source in
 func (self *Manager) pushProcessStateEvent(state ProgramState, source *Program, err error, args ...string) {
 	event := NewEvent([]string{
 		`PROCESS_STATE`,
-		fmt.Sprintf("PROCESS_STATE_%s", state.String()),
+		fmt.Sprintf("PROCESS_STATE_%v", state),
 	}, source.Name, ProgramSource, source, args...)
 
 	event.Error = err
@@ -205,7 +257,11 @@ func (self *Manager) startEventLogger() {
 	self.eventHandlerRunning = true
 
 	for {
-		if self.stopping {
+		self.stopLock.Lock()
+		isStopping := self.stopping
+		self.stopLock.Unlock()
+
+		if isStopping {
 			self.eventHandlerRunning = false
 			break
 		}
@@ -224,4 +280,25 @@ func (self *Manager) startEventLogger() {
 			}
 		}
 	}
+}
+
+func LoadGlobalConfig(data []byte, manager *Manager) error {
+	if iniFile, err := ini.Load(data); err == nil {
+		for _, section := range iniFile.Sections() {
+			switch section.Name() {
+			case `server`:
+				if key := section.Key(`enabled`); key != nil && key.MustBool(false) {
+					manager.Server = new(Server)
+
+					if err := section.MapTo(manager.Server); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	} else {
+		return err
+	}
+
+	return nil
 }

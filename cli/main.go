@@ -13,7 +13,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = `procwatch`
 	app.Usage = `A process execution monitor`
-	app.Version = `0.0.1`
+	app.Version = procwatch.Version
 	app.EnableBashCompletion = false
 
 	app.Flags = []cli.Flag{
@@ -39,6 +39,8 @@ func main() {
 		} else {
 			return err
 		}
+
+		logging.SetLevel(logging.ERROR, `diecast`)
 
 		log.Infof("Starting %s %s", c.App.Name, c.App.Version)
 		return nil

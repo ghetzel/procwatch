@@ -1,0 +1,101 @@
+.content-container {
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+.content-container > h1 {
+    padding-top: 0.25em;
+    padding-bottom: 0.5em;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.navbar.site-main {
+    border-radius: 0;
+}
+
+.navbar.site-main {
+    background-color: #41443b !important;
+}
+
+.navbar.site-main .navbar-brand {
+    margin-right: 1.5em;
+}
+
+.pw-nav-tree > li {
+    margin-left: 0;
+}
+
+.pw-nav-tree .nav-link {
+    border-radius: 4px;
+    width: 100%;
+    padding: 4px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    padding-left: 0.5em;
+}
+
+.pw-nav-tree .nav-link:hover {
+    background-color: rgba(0,0,0,.075);
+}
+
+.pw-nav-tree .nav-link.active {
+    background-color: #0275d8;
+    color: white;
+    font-weight: bold;
+}
+
+.pw-nav-tree .pw-nav-tree-title {
+    font-weight: bold;
+}
+
+.pw-nav-tree > .nav-item:not(:first-child) {
+    margin-top: 1em;
+}
+
+.pw-nav-tree > li li {
+    margin-left: 1em;
+}
+
+
+.pw-program-state-idle:before {
+    content: '\f1db'; /* circle-thin */
+}
+
+.pw-program-state-waiting:before {
+    content: '\f017'; /* fa-clock-o */
+}
+
+.pw-program-state-downloading:before {
+    content: '\f019'; /* fa-download */
+}
+
+.pw-program-state-completed:before {
+    content: '\f00c'; /* fa=check */
+}
+
+.pw-program-state-failed:before {
+    content: '\f071'; /* fa-exclamation-triangle */
+}
+
+/*
+.pw-text-status-downloading {
+    color: #0275d8 !important;
+}
+
+.pw-text-status-completed {
+    color: #5cb85c !important;
+}
+*/
+
+.pw-text-status-failed {
+    color: #d9534f !important;
+}
+
+.pw-log-table {
+    background-color: rgba(0,0,0,0.0625);
+    font-size: 10pt;
+    font-family: monospace;
+}

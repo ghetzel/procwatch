@@ -1,24 +1,18 @@
-.PHONY: test vendor
+.PHONY: test deps
 
-all: vendor fmt build
+all: fmt deps build
 
-update:
-		-rm -rf vendor
-		govend -u -v -l
-
-vendor:
-		go list github.com/govend/govend
-		echo 'Verifying dependencies:'
-		govend -v
+deps:
+	go get .
 
 clean:
-		rm -rf vendor bin
+		rm -rf bin
 
 fmt:
 	gofmt -w .
 
 test:
-	go test -v ./
+	go test -race -v ./
 
 build: fmt
 	go build -o bin/`basename ${PWD}` cli/main.go
