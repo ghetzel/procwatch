@@ -170,7 +170,7 @@ func (self *Manager) AddEventHandler(handler EventHandler) {
 //                                   \- no?              -> [FATAL]
 //
 func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
-	switch program.State() {
+	switch program.GetState() {
 	case ProgramStopped:
 		// first-time start for autostart programs
 		if program.AutoStart && !program.HasEverBeenStarted() {
@@ -226,7 +226,7 @@ func (self *Manager) GetProgramsByState(states ...ProgramState) []*Program {
 
 	for _, program := range self.programs {
 		for _, state := range states {
-			if program.State() == state {
+			if program.GetState() == state {
 				programs = append(programs, program)
 			}
 		}

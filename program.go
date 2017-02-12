@@ -62,6 +62,7 @@ func (self ProgramSignal) Signal() os.Signal {
 type Program struct {
 	Name                  string        `ini:"-"`
 	LoadIndex             int           `ini:"-"`
+	State                 ProgramState  `ini:"-"`
 	Command               string        `ini:"command"`
 	ProcessName           string        `ini:"process_name,omitempty"`
 	NumProcs              int           `ini:"numprocs,omitempty"`
@@ -151,6 +152,7 @@ func NewProgram(name string, manager *Manager) *Program {
 		StderrLogfileBackups:  10,
 		Environment:           make([]string, 0),
 		ServerUrl:             `AUTO`,
+		State:                 ProgramStopped,
 		state:                 ProgramStopped,
 		manager:               manager,
 		lastExitStatus:        -1,
@@ -158,7 +160,7 @@ func NewProgram(name string, manager *Manager) *Program {
 	}
 }
 
-func (self *Program) State() ProgramState {
+func (self *Program) GetState() ProgramState {
 	self.stateLock.RLock()
 	defer self.stateLock.RUnlock()
 	return self.state
@@ -169,7 +171,7 @@ func (self *Program) HasEverBeenStarted() bool {
 }
 
 func (self *Program) ShouldAutoRestart() bool {
-	switch self.State() {
+	switch self.GetState() {
 	case ProgramFatal, ProgramStopped:
 		return false
 	}
@@ -248,7 +250,7 @@ func (self *Program) PID() int {
 }
 
 func (self *Program) InTerminalState() bool {
-	switch self.State() {
+	switch self.GetState() {
 	case ProgramStopped, ProgramExited, ProgramFatal:
 		return true
 	}
@@ -257,7 +259,7 @@ func (self *Program) InTerminalState() bool {
 }
 
 func (self *Program) transitionTo(state ProgramState) {
-	if self.State() != state {
+	if self.GetState() != state {
 		switch state {
 		case ProgramBackoff:
 			self.processRetryCount += 1
@@ -265,6 +267,7 @@ func (self *Program) transitionTo(state ProgramState) {
 
 		self.stateLock.Lock()
 		self.state = state
+		self.State = state
 		self.stateLock.Unlock()
 
 		self.manager.pushProcessStateEvent(state, self, nil)
@@ -295,7 +298,7 @@ func (self *Program) startProcess() error {
 
 		if err := self.command.Start(); err == nil {
 			self.lastStartedAt = time.Now()
-			go self.monitorProcessState()
+			go self.monitorProcessGetState()
 
 			if self.StartSeconds > 0 {
 				startDuration := time.Duration(self.StartSeconds) * time.Second
@@ -322,7 +325,7 @@ func (self *Program) startProcess() error {
 	}
 }
 
-func (self *Program) monitorProcessState() {
+func (self *Program) monitorProcessGetState() {
 	if self.command != nil {
 		// block until process exits and yields an exit status
 		if code, err := self.waitForProcessStatus(); err == nil {

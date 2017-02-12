@@ -85,24 +85,24 @@ func (self *Server) Start() error {
 		if program, ok := self.manager.Program(name); ok {
 			switch action {
 			case `start`:
-				switch program.State() {
+				switch program.GetState() {
 				case ProgramStopped, ProgramFatal:
 					program.Start()
 				}
 
 			case `stop`:
-				switch program.State() {
+				switch program.GetState() {
 				case ProgramStarting, ProgramRunning:
 					program.Stop()
 				}
 
 			case `restart`:
-				switch program.State() {
+				switch program.GetState() {
 				case ProgramStarting, ProgramRunning:
 					program.Stop()
 				}
 
-				switch program.State() {
+				switch program.GetState() {
 				case ProgramStopped, ProgramFatal:
 					program.Start()
 				}
