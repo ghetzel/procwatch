@@ -151,19 +151,24 @@ $(function(){
 
         load: function(){
             if(this.url) {
-                $(this.element).load(this.url, null, function(response, status, xhr){
-                    if(xhr.status < 400){
+                $.ajax({
+                    url: this.url,
+                    timeout: 1000,
+                    success: function(response){
+                        $(this.element).html(response);
+
                         if(this.options.onload){
                             eval(this.options.onload);
                         }
-                    }else{
+                    }.bind(this),
+                    error: function(response){
                         if(this.options.onerror){
                             eval(this.options.onerror);
                         }else{
                             this.clear();
                         }
-                    }
-                }.bind(this));
+                    }.bind(this),
+                });
             }
         },
 

@@ -80,8 +80,6 @@ func (self *Server) Start() error {
 		name := vestigo.Param(req, `program`)
 		action := strings.ToLower(vestigo.Param(req, `action`))
 
-		log.Debugf("Action %s[%s]", name, action)
-
 		if program, ok := self.manager.Program(name); ok {
 			switch action {
 			case `start`:
@@ -110,8 +108,6 @@ func (self *Server) Start() error {
 			default:
 				http.Error(w, fmt.Sprintf("Unknown action '%s'", action), http.StatusBadRequest)
 			}
-
-			log.Debugf("Action %s[%s]: done", name, action)
 
 			http.Error(w, ``, http.StatusNoContent)
 		} else {

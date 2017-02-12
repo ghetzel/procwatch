@@ -397,15 +397,21 @@ func (self *Program) killProcess(force bool) error {
 			signal = self.StopSignal.Signal()
 		}
 
+		log.Debugf("[%s] kill with %v", self.Name, signal)
+
 		// send the requested signal to the process
 		if err := self.command.Process.Signal(signal); err == nil {
 			processExited := make(chan bool)
+
+			log.Debugf("[%s] send signal", self.Name)
 
 			// wait for the signal to be dealt with
 			go func() {
 				self.command.Process.Wait()
 				processExited <- true
 			}()
+
+			log.Debugf("[%s] waiting for exit or timeout", self.Name)
 
 			// wait for signal acknowledgment or timeout
 			select {
@@ -416,6 +422,8 @@ func (self *Program) killProcess(force bool) error {
 					self.killProcess(true)
 				}
 			}
+
+			log.Debugf("[%s] set commandIsRunning = false", self.Name)
 
 			self.commandRunLock.Lock()
 			self.commandIsRunning = false
