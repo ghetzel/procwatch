@@ -2,7 +2,7 @@ package procwatch
 
 import (
 	"fmt"
-	"github.com/go-ini/ini"
+	"github.com/ghetzel/ini"
 	"github.com/mattn/go-shellwords"
 	"os"
 	"os/exec"

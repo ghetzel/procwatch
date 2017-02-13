@@ -3,7 +3,7 @@ package procwatch
 import (
 	"fmt"
 	"github.com/ghetzel/go-stockutil/sliceutil"
-	"github.com/go-ini/ini"
+	"github.com/ghetzel/ini"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
@@ -41,6 +41,8 @@ func NewManager(configFile string) *Manager {
 }
 
 func (self *Manager) Initialize() error {
+	ini.EnableStringInterpolation = false
+
 	if err := self.loadConfigFromFile(self.ConfigFile); err != nil {
 		return err
 	}
