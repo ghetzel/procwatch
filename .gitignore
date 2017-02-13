@@ -5,3 +5,4 @@
 /test*.*
 /*.log
 /*.ini
+/example.conf.d
