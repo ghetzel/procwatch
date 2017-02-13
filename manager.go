@@ -43,10 +43,12 @@ func NewManager(configFile string) *Manager {
 func (self *Manager) Initialize() error {
 	ini.EnableStringInterpolation = false
 
+	// load main config
 	if err := self.loadConfigFromFile(self.ConfigFile); err != nil {
 		return err
 	}
 
+	// load included configs (if any were specified in the main config)
 	for _, include := range self.includes {
 		if matches, err := filepath.Glob(include); err == nil {
 			for _, includedConfig := range matches {

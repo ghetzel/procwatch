@@ -354,6 +354,10 @@ func (self *Program) startProcess() error {
 
 func (self *Program) monitorProcessGetState(command *exec.Cmd) {
 	if command != nil {
+		// setup output interception
+		command.Stdout = NewLogIntercept(self, false)
+		command.Stderr = NewLogIntercept(self, true)
+
 		// block until process exits and yields an exit status
 		if code, err := self.startProcessAndWaitForStatus(command); err == nil {
 			// update the last known exit status
