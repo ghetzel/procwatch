@@ -25,18 +25,20 @@ type Manager struct {
 	doneStopping        chan error
 	lastError           error
 	eventHandlerRunning bool
-	stopLock            sync.Mutex
+	stopLock            sync.RWMutex
+	stopWatchSignal     chan bool
 }
 
 func NewManager(configFile string) *Manager {
 	return &Manager{
-		ConfigFile:    configFile,
-		Events:        make(chan *Event),
-		programs:      make([]*Program, 0),
-		eventHandlers: make([]EventHandler, 0),
-		doneStopping:  make(chan error),
-		includes:      make([]string, 0),
-		loadedConfigs: make([]string, 0),
+		ConfigFile:      configFile,
+		Events:          make(chan *Event),
+		programs:        make([]*Program, 0),
+		eventHandlers:   make([]EventHandler, 0),
+		doneStopping:    make(chan error),
+		includes:        make([]string, 0),
+		loadedConfigs:   make([]string, 0),
+		stopWatchSignal: make(chan bool),
 	}
 }
 
@@ -104,6 +106,7 @@ func (self *Manager) Run() {
 	self.stopLock.Unlock()
 
 	go self.startEventLogger()
+	go self.stopWatcher()
 
 	for {
 		var checkLock sync.WaitGroup
@@ -117,54 +120,49 @@ func (self *Manager) Run() {
 		checkLock.Wait()
 
 		// if we're stopping the manager, and if all the programs are in a terminal state, quit the loop
-		self.stopLock.Lock()
+		self.stopLock.RLock()
 		isStopping := self.stopping
-		self.stopLock.Unlock()
+		self.stopLock.RUnlock()
 
 		if isStopping {
-			shouldBreak := true
-
-			for _, p := range self.programs {
-				if !p.InTerminalState() {
-					shouldBreak = false
-					break
-				}
-			}
-
-			// break out of the mainloop, which will send the terminate signal
-			if shouldBreak {
-				break
-			}
+			log.Debugf("Exiting mainloop")
+			break
 		}
 
 		time.Sleep(500 * time.Millisecond)
 	}
-
-	log.Infof("All programs stopped, stopping manager...")
-	self.doneStopping <- nil
 }
 
-func (self *Manager) Stop() error {
-	for _, program := range self.programs {
-		if !program.InTerminalState() {
-			program.Stop()
-		}
-	}
-
+func (self *Manager) Stop(force bool) {
+	self.stopWatchSignal <- force
 	self.stopLock.Lock()
 	self.stopping = true
 	self.stopLock.Unlock()
 
 	select {
-	case err := <-self.doneStopping:
-		return err
+	case <-self.doneStopping:
+		log.Infof("All programs stopped, stopping manager...")
 	}
-
-	return fmt.Errorf("Manager stopped prematurely")
 }
 
 func (self *Manager) AddEventHandler(handler EventHandler) {
 	self.eventHandlers = append(self.eventHandlers, handler)
+}
+
+func (self *Manager) stopWatcher() {
+	force := <-self.stopWatchSignal
+
+	for _, program := range self.programs {
+		if force {
+			log.Warningf("Force stopping program %s", program.Name)
+			program.ForceStop()
+		} else {
+			log.Infof("Stopping program %s", program.Name)
+			program.Stop()
+		}
+	}
+
+	self.doneStopping <- nil
 }
 
 // Process Management States
@@ -185,6 +183,15 @@ func (self *Manager) AddEventHandler(handler EventHandler) {
 //                                   \- no?              -> [FATAL]
 //
 func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
+	self.stopLock.RLock()
+	isStopping := self.stopping
+	self.stopLock.RUnlock()
+
+	if isStopping {
+		checkLock.Done()
+		return
+	}
+
 	switch program.GetState() {
 	case ProgramStopped:
 		// first-time start for autostart programs

@@ -253,6 +253,16 @@ func (self *Program) Stop() {
 	}
 }
 
+func (self *Program) ForceStop() {
+	self.transitionTo(ProgramStopping)
+
+	if err := self.killProcess(true); err == nil {
+		self.transitionTo(ProgramStopped)
+	} else {
+		self.transitionTo(ProgramFatal)
+	}
+}
+
 func (self *Program) StopFatal() {
 	self.Stop()
 	self.transitionTo(ProgramFatal)

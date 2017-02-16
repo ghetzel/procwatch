@@ -5,6 +5,8 @@ import (
 	"github.com/ghetzel/procwatch"
 	"github.com/op/go-logging"
 	"os"
+	"os/signal"
+	"time"
 )
 
 var log = logging.MustGetLogger(`main`)
@@ -29,6 +31,11 @@ func main() {
 			Value:  `config.ini`,
 			EnvVar: `PROCWATCH_CONFIG`,
 		},
+		cli.DurationFlag{
+			Name:  `max-stop-timeout`,
+			Usage: `The maximum amount of time to wait for programs to gracefully stop when stopping the manager before killing them.`,
+			Value: (120 * time.Second),
+		},
 	}
 
 	app.Before = func(c *cli.Context) error {
@@ -48,6 +55,51 @@ func main() {
 
 	app.Action = func(c *cli.Context) {
 		manager := procwatch.NewManager(c.String(`config`))
+		signalChan := make(chan os.Signal, 1)
+		signal.Notify(signalChan, os.Interrupt)
+
+		go func() {
+			for sig := range signalChan {
+				log.Infof("Received signal %v, stopping all programs...", sig)
+				exitCode := make(chan int)
+
+				go func() {
+					manager.Stop(false)
+					exitCode <- 0
+				}()
+
+				select {
+				case code := <-exitCode:
+					log.Debugf("Stop completed with exit code %d", code)
+					os.Exit(code)
+					return
+
+				case <-time.After(c.Duration(`max-stop-timeout`)):
+					log.Warningf("Timed out waiting for programs to stop, force killing them...")
+					reallyStop := make(chan error)
+
+					go func() {
+						manager.Stop(true)
+						reallyStop <- nil
+					}()
+
+					select {
+					case err := <-reallyStop:
+						log.Fatalf("Received error force killing programs: %v", err)
+
+					case <-time.After(c.Duration(`max-stop-timeout`)):
+						log.Errorf("Failed to stop all programs. Here are the PIDs that we were managing:")
+
+						for _, program := range manager.Programs() {
+							log.Errorf("  Program: name=%s, state=%s, pid=%d", program.Name, program.State, program.ProcessID)
+						}
+					}
+				}
+
+				os.Exit(3)
+				return
+			}
+		}()
 
 		if err := manager.Initialize(); err == nil {
 			manager.Run()
