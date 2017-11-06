@@ -2,13 +2,14 @@ package procwatch
 
 import (
 	"fmt"
-	"github.com/ghetzel/go-stockutil/sliceutil"
-	"github.com/ghetzel/ini"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ghetzel/go-stockutil/sliceutil"
+	"github.com/ghetzel/ini"
 )
 
 type EventHandler func(*Event)

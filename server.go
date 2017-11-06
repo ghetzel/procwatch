@@ -3,12 +3,13 @@ package procwatch
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ghetzel/diecast"
-	"github.com/husobee/vestigo"
-	"github.com/urfave/negroni"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ghetzel/diecast"
+	"github.com/husobee/vestigo"
+	"github.com/urfave/negroni"
 )
 
 var DefaultAddress = `:9001`

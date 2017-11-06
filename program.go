@@ -2,14 +2,15 @@ package procwatch
 
 import (
 	"fmt"
-	"github.com/ghetzel/ini"
-	"github.com/mattn/go-shellwords"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/ghetzel/ini"
+	"github.com/mattn/go-shellwords"
 )
 
 const MaxProcessKillWaitTime = (5 * time.Second)

@@ -1,10 +1,11 @@
 package procwatch
 
 import (
-	"github.com/stretchr/testify/require"
 	"path"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 var actualStates = make([]ProgramState, 0)

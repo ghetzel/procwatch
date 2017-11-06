@@ -6,10 +6,10 @@ deps:
 	go get .
 
 clean:
-		rm -rf bin
+	rm -rf bin
 
 fmt:
-	gofmt -w .
+	goimports -w .
 
 test:
 	go test -race -v ./

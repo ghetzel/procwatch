@@ -1,12 +1,13 @@
 package main
 
 import (
-	"github.com/ghetzel/cli"
-	"github.com/ghetzel/procwatch"
-	"github.com/op/go-logging"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/ghetzel/cli"
+	"github.com/ghetzel/procwatch"
+	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger(`main`)

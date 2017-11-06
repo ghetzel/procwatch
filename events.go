@@ -2,9 +2,10 @@ package procwatch
 
 import (
 	"fmt"
-	"github.com/ghetzel/go-stockutil/sliceutil"
 	"strings"
 	"time"
+
+	"github.com/ghetzel/go-stockutil/sliceutil"
 )
 
 type EventSource int
