@@ -22,7 +22,7 @@ build: fmt
 	go build -o bin/procwatch-tester cli/tester.go
 
 
-packages:
+packages: fmt deps build
 	-rm -rf pkg *.deb *.rpm *.tar.gz
 	mkdir -p pkg/usr/bin
 	cp bin/procwatch pkg/usr/bin/
