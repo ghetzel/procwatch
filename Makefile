@@ -23,9 +23,9 @@ build: fmt
 
 
 packages:
-	-rm -rf pkg
+	-rm -rf pkg *.deb *.rpm *.tar.gz
 	mkdir -p pkg/usr/bin
 	cp bin/procwatch pkg/usr/bin/
 	-fpm -s dir -t deb -n procwatch -v "`./bin/procwatch -v | cut -d' ' -f3`" -C pkg usr
 	-fpm -s dir -t rpm -n procwatch -v "`./bin/procwatch -v | cut -d' ' -f3`" -C pkg usr
-	-cd pkg && tar czvf "../procwatch-`../bin/procwatch -v | cut -d' ' -f3`.tar.gz" usr
+	cd bin && tar czvf "../procwatch-`../bin/procwatch -v | cut -d' ' -f3`.tar.gz" procwatch
