@@ -15,14 +15,13 @@ fmt:
 	goimports -w .
 
 test:
-	go test -race -v ./
+	go build -o bin/procwatch-tester cli/tester.go
+	go test -race -v .
 
 build: fmt
 	go build -o bin/`basename ${PWD}` cli/main.go
-	go build -o bin/procwatch-tester cli/tester.go
 
-
-packages: fmt deps build
+packages: fmt deps build test
 	-rm -rf pkg *.deb *.rpm *.tar.gz
 	mkdir -p pkg/usr/bin
 	cp bin/procwatch pkg/usr/bin/

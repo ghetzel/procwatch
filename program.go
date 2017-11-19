@@ -272,6 +272,9 @@ func (self *Program) StopFatal() {
 func (self *Program) PID() int {
 	if command := self.GetCommand(); command != nil {
 		if command.Process != nil {
+			self.stateLock.Lock()
+			defer self.stateLock.Unlock()
+
 			self.ProcessID = command.Process.Pid
 			return self.ProcessID
 		}
@@ -307,11 +310,12 @@ func (self *Program) transitionTo(state ProgramState) {
 			self.processRetryCount += 1
 		}
 
+		self.stateLock.Lock()
+
 		if state != ProgramRunning {
 			self.ProcessID = 0
 		}
 
-		self.stateLock.Lock()
 		self.State = state
 		self.stateLock.Unlock()
 

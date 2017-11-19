@@ -43,8 +43,7 @@ func newManager(config string) (*Manager, error) {
 }
 
 func stopAndVerifyManager(manager *Manager, assert *require.Assertions) {
-	err := manager.Stop()
-	assert.Nil(err)
+	manager.Stop(false)
 
 	for _, program := range manager.programs {
 		assert.True(program.InTerminalState())

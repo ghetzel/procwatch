@@ -27,19 +27,17 @@ type Manager struct {
 	lastError           error
 	eventHandlerRunning bool
 	stopLock            sync.RWMutex
-	stopWatchSignal     chan bool
 }
 
 func NewManager(configFile string) *Manager {
 	return &Manager{
-		ConfigFile:      configFile,
-		Events:          make(chan *Event),
-		programs:        make([]*Program, 0),
-		eventHandlers:   make([]EventHandler, 0),
-		doneStopping:    make(chan error),
-		includes:        make([]string, 0),
-		loadedConfigs:   make([]string, 0),
-		stopWatchSignal: make(chan bool),
+		ConfigFile:    configFile,
+		Events:        make(chan *Event),
+		programs:      make([]*Program, 0),
+		eventHandlers: make([]EventHandler, 0),
+		doneStopping:  make(chan error),
+		includes:      make([]string, 0),
+		loadedConfigs: make([]string, 0),
 	}
 }
 
@@ -107,7 +105,6 @@ func (self *Manager) Run() {
 	self.stopLock.Unlock()
 
 	go self.startEventLogger()
-	go self.stopWatcher()
 
 	for {
 		var checkLock sync.WaitGroup
@@ -126,7 +123,6 @@ func (self *Manager) Run() {
 		self.stopLock.RUnlock()
 
 		if isStopping {
-			log.Debugf("Exiting mainloop")
 			break
 		}
 
@@ -135,23 +131,9 @@ func (self *Manager) Run() {
 }
 
 func (self *Manager) Stop(force bool) {
-	self.stopWatchSignal <- force
 	self.stopLock.Lock()
 	self.stopping = true
 	self.stopLock.Unlock()
-
-	select {
-	case <-self.doneStopping:
-		log.Infof("All programs stopped, stopping manager...")
-	}
-}
-
-func (self *Manager) AddEventHandler(handler EventHandler) {
-	self.eventHandlers = append(self.eventHandlers, handler)
-}
-
-func (self *Manager) stopWatcher() {
-	force := <-self.stopWatchSignal
 
 	for _, program := range self.programs {
 		if force {
@@ -163,7 +145,11 @@ func (self *Manager) stopWatcher() {
 		}
 	}
 
-	self.doneStopping <- nil
+	log.Infof("All programs stopped, stopping manager...")
+}
+
+func (self *Manager) AddEventHandler(handler EventHandler) {
+	self.eventHandlers = append(self.eventHandlers, handler)
 }
 
 // Process Management States
