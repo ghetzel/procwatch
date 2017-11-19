@@ -3,9 +3,11 @@ package main
 import (
 	"os"
 	"os/signal"
+	"os/user"
 	"time"
 
 	"github.com/ghetzel/cli"
+	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/procwatch"
 	"github.com/op/go-logging"
 )
@@ -29,7 +31,6 @@ func main() {
 		cli.StringFlag{
 			Name:   `config, c`,
 			Usage:  `The configuration file to load`,
-			Value:  `config.ini`,
 			EnvVar: `PROCWATCH_CONFIG`,
 		},
 		cli.DurationFlag{
@@ -55,7 +56,20 @@ func main() {
 	}
 
 	app.Action = func(c *cli.Context) {
-		manager := procwatch.NewManager(c.String(`config`))
+		var configFile string
+
+		if v := c.String(`config`); v != `` {
+			configFile = v
+		} else if u, err := user.Current(); err == nil && u.Uid == `0` {
+			configFile = `/etc/procwatch/config.ini`
+		} else if v, err := pathutil.ExpandUser(`~/.config/procwatch/config.ini`); err == nil {
+			configFile = v
+		} else {
+			log.Fatalf("failed to determine config path: %v", err)
+			return
+		}
+
+		manager := procwatch.NewManager(configFile)
 		signalChan := make(chan os.Signal, 1)
 		signal.Notify(signalChan, os.Interrupt)
 

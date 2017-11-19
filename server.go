@@ -1,5 +1,7 @@
 package procwatch
 
+//go:generate esc -o static.go -pkg procwatch -prefix ui ui
+
 import (
 	"encoding/json"
 	"fmt"
@@ -28,7 +30,7 @@ func (self *Server) Initialize(manager *Manager) error {
 	}
 
 	if self.UiDirectory == `` {
-		self.UiDirectory = `./ui` // TODO: this will be "embedded" after development settles
+		self.UiDirectory = `embedded` // TODO: this will be "embedded" after development settles
 	}
 
 	return nil
@@ -45,7 +47,12 @@ func (self *Server) Start() error {
 	router := vestigo.NewRouter()
 	ui := diecast.NewServer(uiDir, `*.html`)
 
+	if self.UiDirectory == `embedded` {
+		ui.SetFileSystem(FS(false))
+	}
+
 	if err := ui.Initialize(); err != nil {
+		log.Error(err)
 		return err
 	}
 
@@ -116,7 +123,12 @@ func (self *Server) Start() error {
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	return server.ListenAndServe()
+	if err := server.ListenAndServe(); err != nil {
+		log.Error(err)
+		return err
+	}
+
+	return nil
 }
 
 func Respond(w http.ResponseWriter, data interface{}) {

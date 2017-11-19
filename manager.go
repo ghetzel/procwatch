@@ -310,7 +310,9 @@ func LoadGlobalConfig(data []byte, manager *Manager) error {
 			switch section.Name() {
 			case `server`:
 				if key := section.Key(`enabled`); key != nil && key.MustBool(false) {
-					manager.Server = new(Server)
+					manager.Server = &Server{
+						Address: DefaultAddress,
+					}
 
 					if err := section.MapTo(manager.Server); err != nil {
 						return err
