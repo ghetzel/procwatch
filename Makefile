@@ -21,3 +21,11 @@ build: fmt
 	go build -o bin/`basename ${PWD}` cli/main.go
 	go build -o bin/procwatch-tester cli/tester.go
 
+
+packages:
+	-rm -rf pkg
+	mkdir -p pkg/usr/bin
+	cp bin/procwatch pkg/usr/bin/
+	-fpm -s dir -t deb -n procwatch -v "`./bin/procwatch -v | cut -d' ' -f3`" -C pkg usr
+	-fpm -s dir -t rpm -n procwatch -v "`./bin/procwatch -v | cut -d' ' -f3`" -C pkg usr
+	-cd pkg && tar czvf "../procwatch-`../bin/procwatch -v | cut -d' ' -f3`.tar.gz" usr
