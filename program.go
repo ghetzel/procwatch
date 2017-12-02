@@ -270,6 +270,10 @@ func (self *Program) StopFatal() {
 }
 
 func (self *Program) PID() int {
+	if !self.InState(ProgramRunning) {
+		return -1
+	}
+
 	if command := self.GetCommand(); command != nil {
 		if command.Process != nil {
 			self.stateLock.Lock()
