@@ -270,7 +270,7 @@ func (self *Program) StopFatal() {
 }
 
 func (self *Program) PID() int {
-	if !self.InState(ProgramRunning) {
+	if !self.InState(ProgramStarting, ProgramRunning, ProgramStopping) {
 		return -1
 	}
 
