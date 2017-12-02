@@ -348,6 +348,12 @@ func (self *Program) startProcess() error {
 		command.Stdout = NewLogIntercept(self, false)
 		command.Stderr = NewLogIntercept(self, true)
 
+		// set exec directory
+		command.Dir = self.Directory
+
+		// set environment
+		command.Env = self.Environment
+
 		if err := command.Start(); err == nil {
 			self.lastStartedAt = time.Now()
 			go self.monitorProcessGetState(command)
