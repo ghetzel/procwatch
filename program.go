@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ghetzel/ini"
+	"github.com/go-ini/ini"
 	"github.com/mattn/go-shellwords"
 )
 
@@ -94,12 +94,13 @@ type Program struct {
 	StderrEventsEnabled   bool          `ini:"stderr_events_enabled,omitempty"`
 	Environment           []string      `ini:"environment,omitempty" delim:","`
 	ServerUrl             string        `ini:"serverurl,omitempty"`
+	LastExitStatus        int
+	LastStartedAt         time.Time
+	LastExitedAt          time.Time
 	processRetryCount     int
 	manager               *Manager
 	command               *exec.Cmd
 	hasEverBeenStarted    bool
-	lastExitStatus        int
-	lastStartedAt         time.Time
 	commandRunLock        sync.RWMutex
 	stateLock             sync.RWMutex
 }
@@ -154,9 +155,28 @@ func NewProgram(name string, manager *Manager) *Program {
 		Environment:           make([]string, 0),
 		ServerUrl:             `AUTO`,
 		manager:               manager,
-		lastExitStatus:        -1,
+		LastExitStatus:        -1,
 		processRetryCount:     0,
 	}
+}
+
+func (self *Program) String() string {
+	switch self.GetState() {
+	case ProgramStopped:
+		return `Not started`
+	case ProgramRunning:
+		if self.LastStartedAt.IsZero() {
+			return fmt.Sprintf("pid %d", self.PID())
+		} else {
+			return fmt.Sprintf("pid %d, uptime %v", self.PID(), time.Since(self.LastStartedAt).Round(time.Second))
+		}
+	case ProgramExited:
+		return fmt.Sprintf("exited at %v", self.LastExitedAt)
+	case ProgramFatal, ProgramBackoff:
+		return fmt.Sprintf("crashed with status %d at %v", self.LastExitStatus, self.LastExitedAt)
+	}
+
+	return ``
 }
 
 func (self *Program) GetState() ProgramState {
@@ -185,7 +205,7 @@ func (self *Program) ShouldAutoRestart() bool {
 
 	switch autorestart {
 	case `unexpected`:
-		if self.IsExpectedStatus(self.lastExitStatus) {
+		if self.IsExpectedStatus(self.LastExitStatus) {
 			return false
 		}
 
@@ -232,6 +252,8 @@ func (self *Program) Start() int {
 			} else {
 				self.transitionTo(ProgramFatal)
 			}
+
+			self.LastExitedAt = time.Now()
 		}
 	}
 
@@ -352,10 +374,10 @@ func (self *Program) startProcess() error {
 		command.Dir = self.Directory
 
 		// set environment
-		command.Env = self.Environment
+		command.Env = self.getEnvironment()
 
 		if err := command.Start(); err == nil {
-			self.lastStartedAt = time.Now()
+			self.LastStartedAt = time.Now()
 			go self.monitorProcessGetState(command)
 
 			if self.StartSeconds > 0 {
@@ -386,11 +408,13 @@ func (self *Program) monitorProcessGetState(command *exec.Cmd) {
 		// block until process exits and yields an exit status
 		if code, err := self.startProcessAndWaitForStatus(command); err == nil {
 			// update the last known exit status
-			self.lastExitStatus = code
+			self.LastExitStatus = code
 
 			if self.IsExpectedStatus(code) {
 				// if the code is an expected one, EXITED
 				self.transitionTo(ProgramExited)
+				self.LastExitedAt = time.Now()
+
 			} else if self.ShouldAutoRestart() {
 				// if not expected, but we should restart: BACKOFF
 				self.transitionTo(ProgramBackoff)
@@ -467,4 +491,8 @@ func (self *Program) killProcess(force bool) error {
 	}
 
 	return nil
+}
+
+func (self *Program) getEnvironment() []string {
+	return append(os.Environ(), self.Environment...)
 }

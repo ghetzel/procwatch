@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"os/user"
@@ -9,6 +10,7 @@ import (
 	"github.com/ghetzel/cli"
 	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/procwatch"
+	"github.com/ghetzel/procwatch/client"
 	"github.com/op/go-logging"
 )
 
@@ -20,6 +22,8 @@ func main() {
 	app.Usage = `A process execution monitor`
 	app.Version = procwatch.Version
 	app.EnableBashCompletion = false
+
+	var api *client.Client
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -38,6 +42,11 @@ func main() {
 			Usage: `The maximum amount of time to wait for programs to gracefully stop when stopping the manager before killing them.`,
 			Value: (120 * time.Second),
 		},
+		cli.StringFlag{
+			Name:   `client-address, a`,
+			Usage:  `The address to connect to for client operations`,
+			EnvVar: client.DefaultClientAddress,
+		},
 	}
 
 	app.Before = func(c *cli.Context) error {
@@ -51,7 +60,12 @@ func main() {
 
 		logging.SetLevel(logging.ERROR, `diecast`)
 
-		log.Infof("Starting %s %s", c.App.Name, c.App.Version)
+		if c, err := client.NewClient(c.String(`client-address`)); err == nil {
+			api = c
+		} else {
+			log.Fatalf("failed to create client: %v", err)
+		}
+
 		return nil
 	}
 
@@ -123,21 +137,27 @@ func main() {
 		}
 	}
 
-	// app.Commands = []cli.Command{
-	// 	{
-	// 		Name: `status`,
-	// 		Usage: `Show the current status of all registered processes.`,
-	// 		Flags: []cli.Flag{
-	// 			cli.IntFlag{
-	// 				Name: `refresh-interval, i`,
-	// 				Usage: `How frequently to refresh the status output (0 to disable).`,
-	// 			},
-	// 		},
-	// 		Action: func(c *cli.Context) {
-
-	// 		},
-	// 	},
-	// }
+	app.Commands = []cli.Command{
+		{
+			Name:  `status`,
+			Usage: `Show the current status of all registered processes.`,
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:  `refresh-interval, i`,
+					Usage: `How frequently to refresh the status output (0 to disable).`,
+				},
+			},
+			Action: func(c *cli.Context) {
+				if programs, err := api.GetPrograms(); err == nil {
+					for _, program := range programs {
+						fmt.Printf("%-32s  %-8s  %v\n", program.Name, program.State, program)
+					}
+				} else {
+					log.Fatalf("failed to retrieve status: %v", err)
+				}
+			},
+		},
+	}
 
 	app.Run(os.Args)
 }
