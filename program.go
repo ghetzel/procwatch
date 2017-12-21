@@ -65,35 +65,35 @@ type Program struct {
 	LoadIndex             int           `ini:"-"`
 	State                 ProgramState  `ini:"-"`
 	ProcessID             int           `ini:"-"`
-	Command               string        `ini:"command"`
-	ProcessName           string        `ini:"process_name,omitempty"`
-	NumProcs              int           `ini:"numprocs,omitempty"`
-	Directory             string        `ini:"directory,omitempty"`
-	UMask                 int           `ini:"umask,omitempty"`
-	Priority              int           `ini:"priority,omitempty"`
-	AutoStart             bool          `ini:"autostart,omitempty"`
-	AutoRestart           string        `ini:"autorestart,omitempty"`
-	StartSeconds          int           `ini:"startsecs,omitempty"`
-	StartRetries          int           `ini:"startretries,omitempty"`
-	ExitCodes             []int         `ini:"exitcodes,omitempty" delim:","`
-	StopSignal            ProgramSignal `ini:"stopsignal,omitempty"` // any of TERM, HUP, INT, QUIT, KILL, USR1, or USR2
-	StopWaitSeconds       int           `ini:"stopwaitsecs,omitempty"`
-	StopAsGroup           bool          `ini:"stopasgroup,omitempty"`
-	KillAsGroup           bool          `ini:"killasgroup,omitempty"`
-	User                  string        `ini:"user,omitempty"`
-	RedirectStderr        bool          `ini:"redirect_stderr,omitempty"`
-	StdoutLogfile         string        `ini:"stdout_logfile,omitempty"`
-	StdoutLogfileMaxBytes string        `ini:"stdout_logfile_maxbytes,omitempty"`
-	StdoutLogfileBackups  int           `ini:"stdout_logfile_backups,omitempty"`
-	StdoutCaptureMaxBytes string        `ini:"stdout_capture_maxbytes,omitempty"`
-	StdoutEventsEnabled   bool          `ini:"stdout_events_enabled,omitempty"`
-	StderrLogfile         string        `ini:"stderr_logfile,omitempty"`
-	StderrLogfileMaxBytes string        `ini:"stderr_logfile_maxbytes,omitempty"`
-	StderrLogfileBackups  int           `ini:"stderr_logfile_backups,omitempty"`
-	StderrCaptureMaxBytes string        `ini:"stderr_capture_maxbytes,omitempty"`
-	StderrEventsEnabled   bool          `ini:"stderr_events_enabled,omitempty"`
-	Environment           []string      `ini:"environment,omitempty" delim:","`
-	ServerUrl             string        `ini:"serverurl,omitempty"`
+	Command               string        `json:"command"                           ini:"command"`
+	ProcessName           string        `json:"process_name,omitempty"            ini:"process_name,omitempty"`
+	NumProcs              int           `json:"numprocs,omitempty"                ini:"numprocs,omitempty"`
+	Directory             string        `json:"directory,omitempty"               ini:"directory,omitempty"`
+	UMask                 int           `json:"umask,omitempty"                   ini:"umask,omitempty"`
+	Priority              int           `json:"priority,omitempty"                ini:"priority,omitempty"`
+	AutoStart             bool          `json:"autostart,omitempty"               ini:"autostart,omitempty"`
+	AutoRestart           string        `json:"autorestart,omitempty"             ini:"autorestart,omitempty"`
+	StartSeconds          int           `json:"startsecs,omitempty"               ini:"startsecs,omitempty"`
+	StartRetries          int           `json:"startretries,omitempty"            ini:"startretries,omitempty"`
+	ExitCodes             []int         `json:"exitcodes,omitempty"               delim:"," ini:"exitcodes,omitempty" delim:","`
+	StopSignal            ProgramSignal `json:"stopsignal,omitempty"              ini:"stopsignal,omitempty"`
+	StopWaitSeconds       int           `json:"stopwaitsecs,omitempty"            ini:"stopwaitsecs,omitempty"`
+	StopAsGroup           bool          `json:"stopasgroup,omitempty"             ini:"stopasgroup,omitempty"`
+	KillAsGroup           bool          `json:"killasgroup,omitempty"             ini:"killasgroup,omitempty"`
+	User                  string        `json:"user,omitempty"                    ini:"user,omitempty"`
+	RedirectStderr        bool          `json:"redirect_stderr,omitempty"         ini:"redirect_stderr,omitempty"`
+	StdoutLogfile         string        `json:"stdout_logfile,omitempty"          ini:"stdout_logfile,omitempty"`
+	StdoutLogfileMaxBytes string        `json:"stdout_logfile_maxbytes,omitempty" ini:"stdout_logfile_maxbytes,omitempty"`
+	StdoutLogfileBackups  int           `json:"stdout_logfile_backups,omitempty"  ini:"stdout_logfile_backups,omitempty"`
+	StdoutCaptureMaxBytes string        `json:"stdout_capture_maxbytes,omitempty" ini:"stdout_capture_maxbytes,omitempty"`
+	StdoutEventsEnabled   bool          `json:"stdout_events_enabled,omitempty"   ini:"stdout_events_enabled,omitempty"`
+	StderrLogfile         string        `json:"stderr_logfile,omitempty"          ini:"stderr_logfile,omitempty"`
+	StderrLogfileMaxBytes string        `json:"stderr_logfile_maxbytes,omitempty" ini:"stderr_logfile_maxbytes,omitempty"`
+	StderrLogfileBackups  int           `json:"stderr_logfile_backups,omitempty"  ini:"stderr_logfile_backups,omitempty"`
+	StderrCaptureMaxBytes string        `json:"stderr_capture_maxbytes,omitempty" ini:"stderr_capture_maxbytes,omitempty"`
+	StderrEventsEnabled   bool          `json:"stderr_events_enabled,omitempty"   ini:"stderr_events_enabled,omitempty"`
+	Environment           []string      `json:"environment,omitempty"             delim:"," ini:"environment,omitempty" delim:","`
+	ServerUrl             string        `json:"serverurl,omitempty"               ini:"serverurl,omitempty"`
 	LastExitStatus        int
 	LastStartedAt         time.Time
 	LastExitedAt          time.Time

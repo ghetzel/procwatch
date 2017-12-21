@@ -9,7 +9,8 @@ deps:
 	go get .
 
 clean:
-	rm -rf bin
+	-rm -rf bin
+	-rm *.rpm *.tar.gz *.deb
 
 fmt:
 	goimports -w .

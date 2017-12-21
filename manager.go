@@ -18,9 +18,9 @@ type EventHandler func(*Event)
 type Manager struct {
 	ConfigFile          string
 	Events              chan *Event `json:"-"`
+	Server              *Server
 	includes            []string
 	loadedConfigs       []string
-	Server              *Server
 	eventHandlers       []EventHandler
 	programs            []*Program
 	stopping            bool
@@ -30,9 +30,8 @@ type Manager struct {
 	stopLock            sync.RWMutex
 }
 
-func NewManager(configFile string) *Manager {
+func NewManager() *Manager {
 	return &Manager{
-		ConfigFile:    configFile,
 		Events:        make(chan *Event),
 		programs:      make([]*Program, 0),
 		eventHandlers: make([]EventHandler, 0),
@@ -40,6 +39,13 @@ func NewManager(configFile string) *Manager {
 		includes:      make([]string, 0),
 		loadedConfigs: make([]string, 0),
 	}
+}
+
+func NewManagerFromConfig(configFile string) *Manager {
+	manager := NewManager()
+	manager.ConfigFile = configFile
+
+	return manager
 }
 
 func (self *Manager) Initialize() error {
@@ -71,15 +77,12 @@ func (self *Manager) Initialize() error {
 		}
 	}
 
-	if self.Server != nil {
-		if err := self.Server.Initialize(self); err == nil {
-			go self.Server.Start()
-		} else {
-			return err
-		}
-	}
-
 	return nil
+}
+
+func (self *Manager) AddProgram(program *Program) {
+	program.LoadIndex = len(self.programs)
+	self.programs = append(self.programs, program)
 }
 
 func (self *Manager) loadConfigFromFile(filename string) error {
@@ -92,7 +95,7 @@ func (self *Manager) loadConfigFromFile(filename string) error {
 
 		if loaded, err := LoadProgramsFromConfig(data, self); err == nil {
 			for _, program := range loaded {
-				self.programs = append(self.programs, program)
+				self.AddProgram(program)
 			}
 		}
 	} else {
