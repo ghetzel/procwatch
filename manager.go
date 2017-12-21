@@ -11,6 +11,7 @@ import (
 	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/go-stockutil/sliceutil"
 	"github.com/go-ini/ini"
+	logging "github.com/op/go-logging"
 )
 
 type EventHandler func(*Event)
@@ -27,18 +28,23 @@ type Manager struct {
 	doneStopping        chan error
 	lastError           error
 	eventHandlerRunning bool
-	stopLock            sync.RWMutex
+	externalWaiters     chan bool
+	level               logging.Level
 }
 
 func NewManager() *Manager {
-	return &Manager{
-		Events:        make(chan *Event),
-		programs:      make([]*Program, 0),
-		eventHandlers: make([]EventHandler, 0),
-		doneStopping:  make(chan error),
-		includes:      make([]string, 0),
-		loadedConfigs: make([]string, 0),
+	manager := &Manager{
+		Events:          make(chan *Event),
+		programs:        make([]*Program, 0),
+		eventHandlers:   make([]EventHandler, 0),
+		doneStopping:    make(chan error),
+		includes:        make([]string, 0),
+		loadedConfigs:   make([]string, 0),
+		externalWaiters: make(chan bool),
 	}
+
+	SetLogBackend(manager)
+	return manager
 }
 
 func NewManagerFromConfig(configFile string) *Manager {
@@ -106,9 +112,7 @@ func (self *Manager) loadConfigFromFile(filename string) error {
 }
 
 func (self *Manager) Run() {
-	self.stopLock.Lock()
 	self.stopping = false
-	self.stopLock.Unlock()
 
 	go self.startEventLogger()
 
@@ -124,11 +128,10 @@ func (self *Manager) Run() {
 		checkLock.Wait()
 
 		// if we're stopping the manager, and if all the programs are in a terminal state, quit the loop
-		self.stopLock.RLock()
 		isStopping := self.stopping
-		self.stopLock.RUnlock()
 
 		if isStopping {
+			self.externalWaiters <- true
 			break
 		}
 
@@ -136,10 +139,12 @@ func (self *Manager) Run() {
 	}
 }
 
+func (self *Manager) Wait() {
+	<-self.externalWaiters
+}
+
 func (self *Manager) Stop(force bool) {
-	self.stopLock.Lock()
 	self.stopping = true
-	self.stopLock.Unlock()
 
 	for _, program := range self.programs {
 		if force {
@@ -176,9 +181,7 @@ func (self *Manager) AddEventHandler(handler EventHandler) {
 //                                   \- no?              -> [FATAL]
 //
 func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
-	self.stopLock.RLock()
 	isStopping := self.stopping
-	self.stopLock.RUnlock()
 
 	if isStopping {
 		checkLock.Done()
@@ -271,9 +274,7 @@ func (self *Manager) startEventLogger() {
 	self.eventHandlerRunning = true
 
 	for {
-		self.stopLock.Lock()
 		isStopping := self.stopping
-		self.stopLock.Unlock()
 
 		if isStopping {
 			self.eventHandlerRunning = false
@@ -324,5 +325,21 @@ func LoadGlobalConfig(data []byte, manager *Manager) error {
 		return err
 	}
 
+	return nil
+}
+
+func (self *Manager) GetLevel(module string) logging.Level {
+	return self.level
+}
+
+func (self *Manager) SetLevel(lvl logging.Level, module string) {
+	self.level = lvl
+}
+
+func (self *Manager) IsEnabledFor(lvl logging.Level, module string) bool {
+	return true
+}
+
+func (self *Manager) Log(lvl logging.Level, depth int, record *logging.Record) error {
 	return nil
 }

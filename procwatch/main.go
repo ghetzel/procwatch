@@ -47,6 +47,10 @@ func main() {
 			Usage:  `The address to connect to for client operations`,
 			EnvVar: client.DefaultClientAddress,
 		},
+		cli.BoolFlag{
+			Name:  `dashboard, D`,
+			Usage: `Show a CLI dashboard.`,
+		},
 	}
 
 	app.Before = func(c *cli.Context) error {
@@ -131,7 +135,18 @@ func main() {
 		}()
 
 		if err := manager.Initialize(); err == nil {
-			manager.Run()
+			go manager.Run()
+
+			if c.Bool(`dashboard`) {
+				dashboard := NewDashboard(manager)
+
+				if err := dashboard.Run(); err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				manager.Wait()
+			}
+
 		} else {
 			log.Fatal(err)
 		}

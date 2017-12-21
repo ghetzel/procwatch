@@ -2,6 +2,7 @@ package procwatch
 
 import (
 	"io"
+	"strings"
 )
 
 type LogIntercept struct {
@@ -20,10 +21,12 @@ func NewLogIntercept(program *Program, isErrorStream bool) *LogIntercept {
 }
 
 func (self *LogIntercept) Write(p []byte) (int, error) {
-	if self.IsErrorStream {
-		log.Errorf("[%s] LOG: %s", self.Program.Name, string(p[:]))
-	} else {
-		log.Infof("[%s] LOG: %s", self.Program.Name, string(p[:]))
+	for _, line := range strings.Split(string(p), "\n") {
+		if self.IsErrorStream {
+			log.Errorf("[%s] LOG: %s", self.Program.Name, line)
+		} else {
+			log.Infof("[%s] LOG: %s", self.Program.Name, line)
+		}
 	}
 
 	return len(p), nil
