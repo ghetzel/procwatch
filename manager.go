@@ -43,7 +43,7 @@ func NewManager() *Manager {
 		externalWaiters: make(chan bool),
 	}
 
-	SetLogBackend(manager)
+	// SetLogBackend(manager)
 	return manager
 }
 
@@ -141,6 +141,7 @@ func (self *Manager) Run() {
 
 func (self *Manager) Wait() {
 	<-self.externalWaiters
+	log.Debugf("Mainloop exited")
 }
 
 func (self *Manager) Stop(force bool) {
@@ -182,9 +183,9 @@ func (self *Manager) AddEventHandler(handler EventHandler) {
 //
 func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
 	isStopping := self.stopping
+	defer checkLock.Done()
 
 	if isStopping {
-		checkLock.Done()
 		return
 	}
 
@@ -218,8 +219,6 @@ func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGro
 			program.StopFatal()
 		}
 	}
-
-	checkLock.Done()
 }
 
 func (self *Manager) Programs() []*Program {
@@ -267,32 +266,16 @@ func (self *Manager) pushProcessStateEvent(state ProgramState, source *Program, 
 }
 
 func (self *Manager) startEventLogger() {
-	if self.eventHandlerRunning {
-		return
-	}
-
-	self.eventHandlerRunning = true
-
-	for {
-		isStopping := self.stopping
-
-		if isStopping {
-			self.eventHandlerRunning = false
-			break
+	for event := range self.Events {
+		if event.Error != nil {
+			log.Error(event.Error)
+		} else {
+			log.Debug(event.String())
 		}
 
-		select {
-		case event := <-self.Events:
-			log.Debug(event.String())
-
-			if event.Error != nil {
-				log.Error(event.Error)
-			}
-
-			// dispatch event to all registered handlers
-			for _, handler := range self.eventHandlers {
-				handler(event)
-			}
+		// dispatch event to all registered handlers
+		for _, handler := range self.eventHandlers {
+			handler(event)
 		}
 	}
 }

@@ -103,7 +103,7 @@ func main() {
 
 				select {
 				case code := <-exitCode:
-					log.Debugf("Stop completed with exit code %d", code)
+					log.Debugf("main: Stop completed with exit code %d", code)
 					os.Exit(code)
 					return
 
@@ -139,14 +139,14 @@ func main() {
 
 			if c.Bool(`dashboard`) {
 				dashboard := NewDashboard(manager)
+				procwatch.SetLogBackend(procwatch.NewNullBackend())
 
 				if err := dashboard.Run(); err != nil {
 					log.Fatal(err)
 				}
-			} else {
-				manager.Wait()
 			}
 
+			manager.Wait()
 		} else {
 			log.Fatal(err)
 		}

@@ -12,7 +12,7 @@ var actualStates = make([]ProgramState, 0)
 
 func newManager(config string) (*Manager, error) {
 	log.Debugf("Creating new manager...")
-	manager := NewManager(path.Join(`./tests`, config+`.ini`))
+	manager := NewManagerFromConfig(path.Join(`./tests`, config+`.ini`))
 	actualStates = nil
 
 	if err := manager.Initialize(); err == nil {

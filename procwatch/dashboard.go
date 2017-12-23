@@ -28,6 +28,10 @@ func (self *Dashboard) Run() error {
 		self.gui = g
 		defer self.gui.Close()
 		go self.startDrawUpdates()
+
+		self.manager.AddEventHandler(func(_ *procwatch.Event) {
+			self.gui.Update(self.render)
+		})
 	} else {
 		return err
 	}
@@ -66,6 +70,7 @@ func (self *Dashboard) layout(g *gocui.Gui) error {
 }
 
 func (self *Dashboard) quit(_ *gocui.Gui, _ *gocui.View) error {
+	self.manager.Stop(false)
 	return gocui.ErrQuit
 }
 
@@ -100,7 +105,7 @@ func (self *Dashboard) render(g *gocui.Gui) error {
 }
 
 func (self *Dashboard) renderStatus(w io.Writer) {
-	fmt.Fprintf(w, "PROGRAM\tSTATE\tSTATUS\n")
+	fmt.Fprintf(w, "PROGRAM\tSTATE   \tSTATUS\n")
 
 	for _, program := range self.manager.Programs() {
 		state := program.State
@@ -117,7 +122,7 @@ func (self *Dashboard) renderStatus(w io.Writer) {
 			c = color.New(color.FgRed, color.Bold)
 		}
 
-		stateStr := c.Sprintf("%v", state)
+		stateStr := c.Sprintf("%- 8s", state)
 
 		fmt.Fprintf(w, "%s\t%v\t%v\n", program.Name, stateStr, program)
 	}
