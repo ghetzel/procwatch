@@ -17,7 +17,7 @@ fmt:
 
 test:
 	go build -o bin/procwatch-tester procwatch/tester.go
-	go test -v .
+	go test .
 
 build: fmt
 	go build -o bin/`basename ${PWD}` procwatch/main.go procwatch/dashboard.go

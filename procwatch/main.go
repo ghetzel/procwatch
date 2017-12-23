@@ -139,7 +139,7 @@ func main() {
 
 			if c.Bool(`dashboard`) {
 				dashboard := NewDashboard(manager)
-				procwatch.SetLogBackend(procwatch.NewNullBackend())
+				procwatch.SetLogBackend(dashboard)
 
 				if err := dashboard.Run(); err != nil {
 					log.Fatal(err)
