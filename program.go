@@ -448,10 +448,28 @@ func (self *Program) killProcess(force bool) error {
 		}
 
 		if process := self.getProcess(); process != nil {
-			log.Debugf("[%s] Killing PID %d with signal %v", self.Name, self.PID(), signal)
+			var err error
 
-			// send the requested signal to the process
-			if err := process.Signal(signal); err == nil {
+			// if propagating to the whole process group, the signal is negative
+			if self.StopAsGroup || (force && self.KillAsGroup) {
+				if pgrp, perr := syscall.Getpgid(self.PID()); perr == nil {
+					log.Debugf("[%s] Killing Process Group %d with signal %v", self.Name, pgrp, signal)
+
+					if sig, ok := signal.(syscall.Signal); ok {
+						err = syscall.Kill(-1*pgrp, sig)
+					} else {
+						err = fmt.Errorf("wrong signal type; expected syscall.Signal, got %T", signal)
+					}
+				} else {
+					err = fmt.Errorf("failed to retrieve process group ID: %v", perr)
+				}
+
+			} else {
+				log.Debugf("[%s] Killing PID %d with signal %v", self.Name, self.PID(), signal)
+				err = process.Signal(signal)
+			}
+
+			if err == nil {
 				processExited := make(chan bool)
 
 				// wait for the signal to be dealt with
@@ -484,6 +502,8 @@ func (self *Program) killProcess(force bool) error {
 						return fmt.Errorf("[%s] SIGKILL not handled", self.Name)
 					}
 				}
+			} else {
+				log.Errorf("[%s] Failed to send signal: %v", self.Name, err)
 			}
 		}
 	}
