@@ -16,7 +16,7 @@ fmt:
 	goimports -w .
 
 test:
-	go build -o bin/procwatch-tester procwatch/tester.go
+	go build -o bin/procwatch-tester tests/tester.go
 	go test .
 
 build: fmt
