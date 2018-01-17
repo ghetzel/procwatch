@@ -1,6 +1,6 @@
 package procwatch
 
-//go:generate esc -o static.go -pkg procwatch -prefix ui ui
+//go:generate esc -o static.go -pkg procwatch -modtime 1500000000 -prefix ui ui
 
 import (
 	"encoding/json"
