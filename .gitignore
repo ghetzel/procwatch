@@ -6,7 +6,6 @@
 /*.log
 /*.ini
 /example.conf.d
-/static.go
 /pkg
 *.deb
 *.rpm
