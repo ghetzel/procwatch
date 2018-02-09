@@ -37,6 +37,10 @@ func (self *Server) Initialize(manager *Manager) error {
 }
 
 func (self *Server) Start() error {
+	if self.UiDirectory == `` {
+		self.UiDirectory = `embedded`
+	}
+
 	uiDir := self.UiDirectory
 
 	if self.UiDirectory == `embedded` {

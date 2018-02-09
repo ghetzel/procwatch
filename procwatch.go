@@ -5,7 +5,7 @@ import (
 )
 
 var log = logging.MustGetLogger(`procwatch`)
-var Version = `0.1.0`
+var Version = `0.1.2`
 
 func SetLogBackend(backend logging.LeveledBackend) {
 	log.SetBackend(backend)

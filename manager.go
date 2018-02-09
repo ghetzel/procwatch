@@ -41,6 +41,9 @@ func NewManager() *Manager {
 		includes:        make([]string, 0),
 		loadedConfigs:   make([]string, 0),
 		externalWaiters: make(chan bool),
+		Server: &Server{
+			Address: DefaultAddress,
+		},
 	}
 
 	// SetLogBackend(manager)
@@ -78,6 +81,14 @@ func (self *Manager) Initialize() error {
 			} else {
 				return err
 			}
+		} else {
+			return err
+		}
+	}
+
+	if self.Server != nil {
+		if err := self.Server.Initialize(self); err == nil {
+			go self.Server.Start()
 		} else {
 			return err
 		}
@@ -286,10 +297,6 @@ func LoadGlobalConfig(data []byte, manager *Manager) error {
 			switch section.Name() {
 			case `server`:
 				if key := section.Key(`enabled`); key != nil && key.MustBool(false) {
-					manager.Server = &Server{
-						Address: DefaultAddress,
-					}
-
 					if err := section.MapTo(manager.Server); err != nil {
 						return err
 					}
