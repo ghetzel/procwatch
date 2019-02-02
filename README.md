@@ -1,5 +1,5 @@
 <center>
-![Procwatch](/contrib/procwatch-128.png)
+    <img src="/contrib/procwatch-128.png" alt="Procwatch logo">
 </center>
 
 ## Overview
