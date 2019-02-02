@@ -1,10 +1,13 @@
 .PHONY: test deps
+.EXPORT_ALL_VARIABLES:
 
-all: fmt deps build
+GO111MODULE     ?= on
+LOCALS          := $(shell find . -type f -name '*.go' 2> /dev/null)
+
+all: deps fmt build
 
 deps:
 	@go list github.com/mjibson/esc || go get github.com/mjibson/esc/...
-	@go list golang.org/x/tools/cmd/goimports || go get golang.org/x/tools/cmd/goimports
 	go generate -x
 	go get .
 
@@ -13,14 +16,14 @@ clean:
 	-rm *.rpm *.tar.gz *.deb
 
 fmt:
-	goimports -w .
+	gofmt -w $(LOCALS)
 
 test:
 	go build -o bin/procwatch-tester tests/tester.go
-	go test .
+	go test ./...
 
 build: fmt
-	go build -o bin/`basename ${PWD}` procwatch/main.go procwatch/dashboard.go
+	go build -o bin/procwatch cmd/procwatch/*.go
 
 packages: fmt deps build test
 	-rm -rf pkg *.deb *.rpm *.tar.gz

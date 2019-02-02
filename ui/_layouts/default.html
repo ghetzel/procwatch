@@ -1,17 +1,22 @@
+---
+bindings:
+- name:     status
+  resource: /api/status
+---
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
-    {{- if .page.refresh }}
-    <meta http-equiv="refresh" content="{{ .page.refresh }}">
+    {{- if $.page.refresh }}
+    <meta http-equiv="refresh" content="{{ $.page.refresh }}">
     {{ end -}}
 
     <!-- jQuery first, then Tether, then Bootstrap JS. -->
     <script src="/js/jquery.min.js" integrity="sha384-3ceskX3iaEnIogmQchP8opvBy3Mi7Ce34nWjpBIwVTHfGYWQS9jwHDVRnpKKHJg7" crossorigin="anonymous"></script>
     <script src="/js/tether.min.js" integrity="sha384-XTs3FgkjiBgo8qjEjBk0tGmf3wPrWtA6coPfQDfFEY8AnYJwjalXCiosYRBIBZX8" crossorigin="anonymous"></script>
-    <script src="/js/bootstrap.min.js" integrity="sha384-BLiI7JTZm+JWlgKa0M0kGRpJbF2J8q+qreVrKBC47e3K6BW78kGLrCkeRX6I9RoK" crossorigin="anonymous"></script>
+    <script src="/js/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k" crossorigin="anonymous"></script>
     <script src="/js/stapes.min.js" integrity="sha384-l+Z/WtSkegBMMzrBOVlkaXa+1kXdJSBKmuhw0t6VTyan4gzqm+L/Nd5BS+kik166" crossorigin="anonymous"></script>
     <script src="/js/bootstrap-notify.min.js" integrity="sha384-Qnyy4lkYCL9J8NhIWAT7bMPccirUwfiBj7PLqr1ZBlSSJ0+A2XDB0UlqZcg+0VGS" crossorigin="anonymous"></script>
 
@@ -19,21 +24,33 @@
     <script src="/js/app.js"></script>
 
     <!-- Bootstrap CSS -->
-    <link rel="stylesheet" href="/css/bootstrap.min.css" integrity="sha384-AysaV+vQoT3kOAXZkl02PThvDr8HYKPZhNT5h/CXfBThSRXQ6jW5DO2ekP5ViFdi" crossorigin="anonymous">
+    <link rel="stylesheet" href="/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
     <link rel="stylesheet" href="/css/font-awesome.min.css" integrity="sha384-oZMfhCtQRrSYbsX24SR/ieTzAUPm2W17TOVtEMqi/t72HLoBATmm7J82ezlfk7j5" crossorigin="anonymous">
     <link rel="stylesheet" href="/css/app.css">
 
-    <title>Procwatch Manager{{ if .page.title }} :: {{ .page.title }}{{ end }}</title>
+    <title>Procwatch Manager{{ if $.page.title }} :: {{ $.page.title }}{{ end }}</title>
   </head>
   <body>
-    <nav class="navbar navbar-dark bg-inverse site-main">
+    <nav class="navbar navbar-expand-md navbar-dark bg-inverse site-main">
         <div class="container">
             <a class="navbar-brand" href="/">
               <img src="/img/procwatch-24-text-inverse.png">
             </a>
-            <button class="navbar-toggler navbar-toggler-right hidden-sm-up" type="button" data-toggle="collapse" data-target="#navbar-header" aria-controls="navbar-header" aria-expanded="false" aria-label="Toggle navigation"></button>
-            <div class="collapse navbar-toggleable-xs" id="navbar-header">
-              <ul class="nav navbar-nav">
+
+            <button
+              class="navbar-toggler"
+              type="button"
+              data-toggle="collapse"
+              data-target="#navbar"
+              aria-controls="navbar"
+              aria-expanded="false"
+              aria-label="Toggle navigation"
+            >
+              <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbar">
+              <ul class="navbar-nav mr-auto">
                 <li class="nav-item {{ if eq .request.url.path `/` }}active{{end}}">
                   <a class="nav-link" href="/">
                     <i class="fa fa-fw fa-list"></i>
@@ -53,14 +70,18 @@
                   </a>
                 </li>
               </ul>
+
+              <span class="ml-auto navbar-text">
+                v{{ $.bindings.status.version }}
+              </span>
             </div>
         </div>
     </nav>
 
     <div class="container content-container">
-      {{ if .page.title }}
-      {{ if not .page.hide_title }}
-      <h1>{{ .page.title }}</h1>
+      {{ if $.page.title }}
+      {{ if not $.page.hide_title }}
+      <h1>{{ $.page.title }}</h1>
       {{ end }}
       {{ end }}
       {{ template "content" . }}

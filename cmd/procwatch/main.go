@@ -8,13 +8,11 @@ import (
 	"time"
 
 	"github.com/ghetzel/cli"
+	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/procwatch"
 	"github.com/ghetzel/procwatch/client"
-	"github.com/op/go-logging"
 )
-
-var log = logging.MustGetLogger(`main`)
 
 func main() {
 	app := cli.NewApp()
@@ -54,15 +52,7 @@ func main() {
 	}
 
 	app.Before = func(c *cli.Context) error {
-		logging.SetFormatter(logging.MustStringFormatter(`%{color}%{level:.4s}%{color:reset}[%{id:04d}] %{message}`))
-
-		if level, err := logging.LogLevel(c.String(`log-level`)); err == nil {
-			logging.SetLevel(level, ``)
-		} else {
-			return err
-		}
-
-		logging.SetLevel(logging.ERROR, `diecast`)
+		log.SetLevelString(c.String(`log-level`))
 
 		if c, err := client.NewClient(c.String(`client-address`)); err == nil {
 			api = c
@@ -139,7 +129,6 @@ func main() {
 
 			if c.Bool(`dashboard`) {
 				dashboard := NewDashboard(manager)
-				procwatch.SetLogBackend(dashboard)
 
 				if err := dashboard.Run(); err != nil {
 					log.Fatal(err)

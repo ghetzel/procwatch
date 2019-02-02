@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/ghetzel/diecast"
+	"github.com/ghetzel/go-stockutil/log"
 	"github.com/husobee/vestigo"
 	"github.com/urfave/negroni"
 )
@@ -30,7 +32,7 @@ func (self *Server) Initialize(manager *Manager) error {
 	}
 
 	if self.UiDirectory == `` {
-		self.UiDirectory = `embedded` // TODO: this will be "embedded" after development settles
+		self.UiDirectory = `embedded`
 	}
 
 	return nil
@@ -39,6 +41,10 @@ func (self *Server) Initialize(manager *Manager) error {
 func (self *Server) Start() error {
 	if self.UiDirectory == `` {
 		self.UiDirectory = `embedded`
+	}
+
+	if d := os.Getenv(`UI`); d != `` {
+		self.UiDirectory = d
 	}
 
 	uiDir := self.UiDirectory

@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/go-stockutil/sliceutil"
 	"github.com/go-ini/ini"
-	logging "github.com/op/go-logging"
 )
 
 type EventHandler func(*Event)
@@ -29,7 +29,6 @@ type Manager struct {
 	lastError           error
 	eventHandlerRunning bool
 	externalWaiters     chan bool
-	level               logging.Level
 }
 
 func NewManager() *Manager {
@@ -318,18 +317,6 @@ func LoadGlobalConfig(data []byte, manager *Manager) error {
 	return nil
 }
 
-func (self *Manager) GetLevel(module string) logging.Level {
-	return self.level
-}
-
-func (self *Manager) SetLevel(lvl logging.Level, module string) {
-	self.level = lvl
-}
-
-func (self *Manager) IsEnabledFor(lvl logging.Level, module string) bool {
-	return true
-}
-
-func (self *Manager) Log(lvl logging.Level, depth int, record *logging.Record) error {
-	return nil
-}
+// func (self *Manager) Log(lvl logging.Level, depth int, record *logging.Record) error {
+// 	return nil
+// }

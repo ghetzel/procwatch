@@ -1,0 +1,21 @@
+---
+bindings:
+-   name: manager
+    resource: /api/manager
+
+-   name: programs
+    resource: /api/programs
+---
+<h2>Current Configuration</h2>
+
+<h3>Manager</h3>
+<pre>{{ jsonify $.bindings.manager }}</pre>
+
+<h3>Programs</h3>
+
+{{ range $program := $.bindings.programs }}
+<details>
+    <summary>{{ $program.Name }}</summary>
+    <pre>{{ jsonify $program }}</pre>
+</details>
+{{ end }}

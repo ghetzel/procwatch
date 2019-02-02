@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ghetzel/go-stockutil/log"
 	"github.com/stretchr/testify/require"
 )
 
