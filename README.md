@@ -1,8 +1,4 @@
-# Procwatch [![GoDoc](https://godoc.org/github.com/ghetzel/procwatch?status.svg)](https://godoc.org/github.com/ghetzel/procwatch)
-
-<p align="center">
-    <img src="/contrib/procwatch-128.png" alt="Procwatch logo">
-</p>
+# ![Procwatch](/contrib/procwatch-72.png) [![GoDoc](https://godoc.org/github.com/ghetzel/procwatch?status.svg)](https://godoc.org/github.com/ghetzel/procwatch)
 
 ## Overview
 
