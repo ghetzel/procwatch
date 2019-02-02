@@ -1,4 +1,6 @@
+<center>
 ![Procwatch](/contrib/procwatch-128.png)
+</center>
 
 ## Overview
 
