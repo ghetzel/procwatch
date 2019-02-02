@@ -1,4 +1,6 @@
-<img style="text-align: center" src="/contrib/procwatch-128.png" alt="Procwatch logo">
+<p align="center">
+    <img src="/contrib/procwatch-128.png" alt="Procwatch logo">
+</p>
 
 ## Overview
 
