@@ -27,7 +27,7 @@ func main() {
 		cli.StringFlag{
 			Name:   `log-level, L`,
 			Usage:  `Level of log output verbosity`,
-			Value:  `debug`,
+			Value:  `notice`,
 			EnvVar: `LOGLEVEL`,
 		},
 		cli.StringFlag{

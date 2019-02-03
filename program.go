@@ -3,16 +3,21 @@ package procwatch
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/dustin/go-humanize"
+	"github.com/ghetzel/go-stockutil/fileutil"
 	"github.com/ghetzel/go-stockutil/log"
+	"github.com/ghetzel/go-stockutil/mathutil"
 	"github.com/ghetzel/go-stockutil/stringutil"
 	"github.com/go-cmd/cmd"
 	"github.com/go-ini/ini"
 	"github.com/mattn/go-shellwords"
+	"github.com/natefinch/lumberjack"
 )
 
 const MaxProcessKillWaitTime = (5 * time.Second)
@@ -104,6 +109,7 @@ type Program struct {
 	cmd                   *cmd.Cmd
 	hasEverBeenStarted    bool
 	processLock           sync.Mutex
+	rollingLogger         *lumberjack.Logger
 }
 
 func LoadProgramsFromConfig(data []byte, manager *Manager) (map[string]*Program, error) {
@@ -178,6 +184,81 @@ func (self *Program) String() string {
 	}
 
 	return ``
+}
+
+func (self *Program) Log(line string, stdout bool) {
+	var logfile string
+	var suffix string
+
+	if stdout || self.RedirectStderr {
+		logfile = self.StdoutLogfile
+
+		if self.RedirectStderr {
+			suffix = `.log`
+		} else {
+			suffix = `_out.log`
+		}
+	} else {
+		logfile = self.StderrLogfile
+		suffix = `_err.log`
+	}
+
+	if logfile == `AUTO` {
+		// TODO: this should be ProcessName, but has to wait until pattern interpolation is built
+		logfile = filepath.Join(self.manager.ChildLogDir, fmt.Sprintf("%s%s", self.Name, suffix))
+	}
+
+	logfile = fileutil.MustExpandUser(logfile)
+
+	switch strings.ToLower(logfile) {
+	case `none`:
+		return
+	case `stdout`:
+		fmt.Fprint(os.Stdout, strings.TrimSuffix(line, "\n")+"\n")
+	case `stderr`:
+		fmt.Fprint(os.Stdout, strings.TrimSuffix(line, "\n")+"\n")
+	default:
+		if self.rollingLogger == nil {
+			var maxsize int
+			var backups int
+
+			if stdout || self.RedirectStderr {
+				backups = self.StdoutLogfileBackups
+
+				if b, err := humanize.ParseBytes(self.StdoutLogfileMaxBytes); err == nil {
+					maxsize = int(b)
+				} else {
+					maxsize = int(DefaultLogFileMaxBytes)
+				}
+			} else {
+				backups = self.StderrLogfileBackups
+
+				if b, err := humanize.ParseBytes(self.StderrLogfileMaxBytes); err == nil {
+					maxsize = int(b)
+				} else {
+					maxsize = int(DefaultLogFileMaxBytes)
+				}
+			}
+
+			self.rollingLogger = &lumberjack.Logger{
+				Filename:   logfile,
+				MaxSize:    int(mathutil.ClampLower(float64(maxsize/1048576), 1)),
+				MaxBackups: backups,
+				Compress:   true,
+			}
+
+			if parent := filepath.Dir(logfile); !fileutil.DirExists(parent) {
+				os.MkdirAll(parent, 0700)
+			}
+		}
+
+		fmt.Fprintf(
+			self.rollingLogger,
+			"%s %s\n",
+			time.Now().Format(`2006-01-02 15:04:05,999`),
+			line,
+		)
+	}
 }
 
 func (self *Program) GetState() ProgramState {
@@ -321,8 +402,12 @@ func (self *Program) transitionTo(state ProgramState) {
 }
 
 func (self *Program) isRunning() bool {
-	if self.cmd != nil {
-		if status := self.cmd.Status(); !status.Complete {
+	self.processLock.Lock()
+	process := self.cmd
+	self.processLock.Unlock()
+
+	if process != nil {
+		if status := process.Status(); !status.Complete {
 			return true
 		}
 	}
@@ -349,8 +434,17 @@ func (self *Program) startProcess() error {
 		cmd.Env = self.getEnvironment()
 		cmd.Dir = self.Directory
 
-		go LogOutput(self, cmd.Stdout, `notice`)
-		go LogOutput(self, cmd.Stderr, `error`)
+		go func() {
+			for line := range cmd.Stdout {
+				self.Log(line, true)
+			}
+		}()
+
+		go func() {
+			for line := range cmd.Stderr {
+				self.Log(line, false)
+			}
+		}()
 
 		cmd.Start()
 
@@ -393,12 +487,13 @@ func (self *Program) startProcess() error {
 }
 
 func (self *Program) monitorProcess() {
-	if self.cmd != nil {
-		<-self.cmd.Done()
-		status := self.cmd.Status()
+	self.processLock.Lock()
+	process := self.cmd
+	self.processLock.Unlock()
 
-		// ---------------------------------------------------------------------
-		self.processLock.Lock()
+	if process != nil {
+		<-process.Done()
+		status := process.Status()
 
 		if status.Error == nil {
 			log.Debugf("[%s] PID %d exited with code %d", self.Name, status.PID, status.Exit)
@@ -422,24 +517,27 @@ func (self *Program) monitorProcess() {
 			self.transitionTo(ProgramFatal)
 		}
 
+		self.processLock.Lock()
 		self.cmd = nil
 		self.ProcessID = 0
-
 		self.processLock.Unlock()
-		// ---------------------------------------------------------------------
 	}
 }
 
 func (self *Program) killProcess(force bool) error {
 	if self.InState(ProgramStarting, ProgramRunning, ProgramStopping) {
-		if self.cmd != nil {
-			status := self.cmd.Status()
+		self.processLock.Lock()
+		process := self.cmd
+		self.processLock.Unlock()
+
+		if process != nil {
+			status := process.Status()
 			log.Debugf("[%s] Stopping PID %d with", self.Name, status.PID)
 
-			if err := self.cmd.Stop(); err == nil {
+			if err := process.Stop(); err == nil {
 				select {
-				case <-self.cmd.Done():
-					if wait := self.cmd.Status(); wait.Error != nil {
+				case <-process.Done():
+					if wait := process.Status(); wait.Error != nil {
 						if force {
 							self.transitionTo(ProgramFatal)
 						} else {

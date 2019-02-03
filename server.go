@@ -19,8 +19,8 @@ import (
 var DefaultAddress = `:9001`
 
 type Server struct {
-	Address     string `json:"address"`
-	UiDirectory string `json:"ui_directory,omitempty"`
+	Address     string `json:"address"                ini:"address"`
+	UiDirectory string `json:"ui_directory,omitempty" ini:"ui_directory"`
 	manager     *Manager
 }
 

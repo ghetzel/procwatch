@@ -3,21 +3,33 @@ package procwatch
 import (
 	"fmt"
 	"io/ioutil"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
+	"github.com/ghetzel/go-stockutil/convutil"
 	"github.com/ghetzel/go-stockutil/log"
+	"github.com/ghetzel/go-stockutil/mathutil"
 	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/go-stockutil/sliceutil"
 	"github.com/go-ini/ini"
+	"github.com/natefinch/lumberjack"
 )
+
+var DefaultLogFileMaxBytes = 50 * convutil.Megabyte
 
 type EventHandler func(*Event)
 
 type Manager struct {
 	ConfigFile          string
+	LogFile             string      `json:"logfile"           ini:"logfile"`
+	LogFileMaxBytes     string      `json:"logfile_maxbytes"  ini:"logfile_maxbytes"`
+	LogFileBackups      int         `json:"logfile_backups"   ini:"logfile_backups"`
+	LogLevel            string      `json:"loglevel"          ini:"loglevel"`
+	ChildLogDir         string      `json:"childlogdir"       ini:"childlogdir"`
 	Events              chan *Event `json:"-"`
 	Server              *Server
 	includes            []string
@@ -29,10 +41,14 @@ type Manager struct {
 	lastError           error
 	eventHandlerRunning bool
 	externalWaiters     chan bool
+	intercept           string
+	rollingLogger       *lumberjack.Logger
+	logFileMaxBytes     uint64
 }
 
 func NewManager() *Manager {
 	manager := &Manager{
+		LogFileMaxBytes: `50MB`,
 		Events:          make(chan *Event),
 		programs:        make([]*Program, 0),
 		eventHandlers:   make([]EventHandler, 0),
@@ -45,7 +61,15 @@ func NewManager() *Manager {
 		},
 	}
 
-	// SetLogBackend(manager)
+	if u, err := user.Current(); err == nil && u.Uid == `0` {
+		manager.ChildLogDir = `/var/log/procwatch`
+	} else {
+		manager.ChildLogDir, _ = pathutil.ExpandUser(`~/.cache/procwatch`)
+	}
+
+	// register the log intercept function for this manager
+	manager.intercept = log.AddLogIntercept(manager.Log)
+
 	return manager
 }
 
@@ -83,6 +107,17 @@ func (self *Manager) Initialize() error {
 		} else {
 			return err
 		}
+	}
+
+	if self.LogFileMaxBytes != `` {
+		if b, err := humanize.ParseBytes(self.LogFileMaxBytes); err == nil {
+			self.logFileMaxBytes = b
+		} else {
+			return fmt.Errorf("logfile_maxbytes: %v", err)
+		}
+	} else {
+		self.LogFileMaxBytes = DefaultLogFileMaxBytes.To(convutil.Megabyte)
+		self.logFileMaxBytes = uint64(DefaultLogFileMaxBytes)
 	}
 
 	if self.Server != nil {
@@ -294,6 +329,10 @@ func LoadGlobalConfig(data []byte, manager *Manager) error {
 	if iniFile, err := ini.Load(data); err == nil {
 		for _, section := range iniFile.Sections() {
 			switch section.Name() {
+			case `procwatch`, `supervisord`:
+				if err := section.MapTo(manager); err != nil {
+					return err
+				}
 			case `server`:
 				if key := section.Key(`enabled`); key != nil && key.MustBool(false) {
 					if err := section.MapTo(manager.Server); err != nil {
@@ -317,6 +356,27 @@ func LoadGlobalConfig(data []byte, manager *Manager) error {
 	return nil
 }
 
-// func (self *Manager) Log(lvl logging.Level, depth int, record *logging.Record) error {
-// 	return nil
-// }
+func (self *Manager) Log(level log.Level, line string, stack log.StackItems) {
+	if self.LogFile == `` {
+		return
+	} else if level < log.GetLevel(self.LogLevel) {
+		return
+	}
+
+	if self.rollingLogger == nil {
+		self.rollingLogger = &lumberjack.Logger{
+			Filename:   self.LogFile,
+			MaxSize:    int(mathutil.ClampLower(float64(self.logFileMaxBytes/1048576), 1)),
+			MaxBackups: self.LogFileBackups,
+			Compress:   true,
+		}
+	}
+
+	fmt.Fprintf(
+		self.rollingLogger,
+		"%s %v: %s\n",
+		time.Now().Format(`2006-01-02 15:04:05,999`),
+		level,
+		line,
+	)
+}
