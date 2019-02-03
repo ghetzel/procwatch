@@ -27,7 +27,7 @@ bindings:
         <td class="col-sm-2">
           {{ if and (eq $program.State `RUNNING`) $program.LastStartedAt }}
               {{ since $program.LastStartedAt `second` }}
-          {{ else if and (eq $program.State `EXITED`) }}
+          {{ else if any $program.State `EXITED` `FATAL` `BACKOFF` }}
               exited {{ $program.LastExitStatus }} ({{ since $program.LastExitedAt "s" }} ago)
           {{ end }}
         </td>

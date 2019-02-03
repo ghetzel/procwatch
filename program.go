@@ -101,15 +101,16 @@ type Program struct {
 	StderrEventsEnabled   bool          `json:"stderr_events_enabled,omitempty"   ini:"stderr_events_enabled,omitempty"`
 	Environment           []string      `json:"environment,omitempty"             delim:"," ini:"environment,omitempty" delim:","`
 	ServerUrl             string        `json:"serverurl,omitempty"               ini:"serverurl,omitempty"`
-	LastExitStatus        int
-	LastStartedAt         time.Time
-	LastExitedAt          time.Time
-	processRetryCount     int
-	manager               *Manager
-	cmd                   *cmd.Cmd
-	hasEverBeenStarted    bool
-	processLock           sync.Mutex
-	rollingLogger         *lumberjack.Logger
+	// Pidfile               string        `json:"pidfile"                           ini:"pidfile"`
+	LastExitStatus     int
+	LastStartedAt      time.Time
+	LastExitedAt       time.Time
+	processRetryCount  int
+	manager            *Manager
+	cmd                *cmd.Cmd
+	hasEverBeenStarted bool
+	processLock        sync.Mutex
+	rollingLogger      *lumberjack.Logger
 }
 
 func LoadProgramsFromConfig(data []byte, manager *Manager) (map[string]*Program, error) {
@@ -154,11 +155,12 @@ func NewProgram(name string, manager *Manager) *Program {
 		StopSignal:            `TERM`,
 		StopWaitSeconds:       10,
 		StdoutLogfile:         `AUTO`,
-		StdoutLogfileMaxBytes: `50MB`,
-		StdoutLogfileBackups:  10,
+		RedirectStderr:        manager.RedirectStderr,
+		StdoutLogfileMaxBytes: manager.StdoutLogfileMaxBytes,
+		StdoutLogfileBackups:  manager.StdoutLogfileBackups,
 		StderrLogfile:         `AUTO`,
-		StderrLogfileMaxBytes: `50MB`,
-		StderrLogfileBackups:  10,
+		StderrLogfileMaxBytes: manager.StderrLogfileMaxBytes,
+		StderrLogfileBackups:  manager.StderrLogfileBackups,
 		Environment:           make([]string, 0),
 		ServerUrl:             `AUTO`,
 		manager:               manager,
@@ -190,7 +192,7 @@ func (self *Program) Log(line string, stdout bool) {
 	var logfile string
 	var suffix string
 
-	if stdout || self.RedirectStderr {
+	if stdout || self.RedirectStderr || self.manager.RedirectStderr {
 		logfile = self.StdoutLogfile
 
 		if self.RedirectStderr {
@@ -427,12 +429,19 @@ func (self *Program) startProcess() error {
 	shwords.ParseBacktick = false
 
 	if words, err := shwords.Parse(self.Command); err == nil {
+		// expand all tildes into the current user's home directory
+		for i, word := range words {
+			if strings.HasPrefix(word, `~`) {
+				words[i], _ = fileutil.ExpandUser(word)
+			}
+		}
+
 		cmd := cmd.NewCmdOptions(cmd.Options{
 			Streaming: true,
 		}, words[0], words[1:]...)
 
 		cmd.Env = self.getEnvironment()
-		cmd.Dir = self.Directory
+		cmd.Dir = fileutil.MustExpandUser(self.Directory)
 
 		go func() {
 			for line := range cmd.Stdout {

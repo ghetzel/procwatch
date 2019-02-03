@@ -24,47 +24,50 @@ var DefaultLogFileMaxBytes = 50 * convutil.Megabyte
 type EventHandler func(*Event)
 
 type Manager struct {
-	ConfigFile          string
-	LogFile             string      `json:"logfile"           ini:"logfile"`
-	LogFileMaxBytes     string      `json:"logfile_maxbytes"  ini:"logfile_maxbytes"`
-	LogFileBackups      int         `json:"logfile_backups"   ini:"logfile_backups"`
-	LogLevel            string      `json:"loglevel"          ini:"loglevel"`
-	ChildLogDir         string      `json:"childlogdir"       ini:"childlogdir"`
-	Events              chan *Event `json:"-"`
-	Server              *Server
-	includes            []string
-	loadedConfigs       []string
-	eventHandlers       []EventHandler
-	programs            []*Program
-	stopping            bool
-	doneStopping        chan error
-	lastError           error
-	eventHandlerRunning bool
-	externalWaiters     chan bool
-	intercept           string
-	rollingLogger       *lumberjack.Logger
-	logFileMaxBytes     uint64
+	ConfigFile            string
+	LogFile               string      `json:"logfile"                 ini:"logfile"`
+	LogFileMaxBytes       string      `json:"logfile_maxbytes"        ini:"logfile_maxbytes"`
+	LogFileBackups        int         `json:"logfile_backups"         ini:"logfile_backups"`
+	LogLevel              string      `json:"loglevel"                ini:"loglevel"`
+	ChildLogDir           string      `json:"childlogdir"             ini:"childlogdir"`
+	RedirectStderr        bool        `json:"redirect_stderr"         ini:"redirect_stderr,omitempty"`
+	StdoutLogfileMaxBytes string      `json:"stdout_logfile_maxbytes" ini:"stdout_logfile_maxbytes"`
+	StderrLogfileMaxBytes string      `json:"stderr_logfile_maxbytes" ini:"stderr_logfile_maxbytes"`
+	StderrLogfileBackups  int         `json:"stderr_logfile_backups"  ini:"stderr_logfile_backups"`
+	StdoutLogfileBackups  int         `json:"stdout_logfile_backups"  ini:"stdout_logfile_backups"`
+	Events                chan *Event `json:"-"`
+	Server                *Server
+	includes              []string
+	loadedConfigs         []string
+	eventHandlers         []EventHandler
+	programs              []*Program
+	stopping              bool
+	doneStopping          chan error
+	lastError             error
+	eventHandlerRunning   bool
+	externalWaiters       chan bool
+	intercept             string
+	rollingLogger         *lumberjack.Logger
+	logFileMaxBytes       uint64
 }
 
 func NewManager() *Manager {
 	manager := &Manager{
-		LogFileMaxBytes: `50MB`,
-		Events:          make(chan *Event),
-		programs:        make([]*Program, 0),
-		eventHandlers:   make([]EventHandler, 0),
-		doneStopping:    make(chan error),
-		includes:        make([]string, 0),
-		loadedConfigs:   make([]string, 0),
-		externalWaiters: make(chan bool),
+		LogFileMaxBytes:       `50MB`,
+		StdoutLogfileMaxBytes: `50MB`,
+		StderrLogfileMaxBytes: `50MB`,
+		StderrLogfileBackups:  10,
+		StdoutLogfileBackups:  10,
+		Events:                make(chan *Event),
+		programs:              make([]*Program, 0),
+		eventHandlers:         make([]EventHandler, 0),
+		doneStopping:          make(chan error),
+		includes:              make([]string, 0),
+		loadedConfigs:         make([]string, 0),
+		externalWaiters:       make(chan bool),
 		Server: &Server{
 			Address: DefaultAddress,
 		},
-	}
-
-	if u, err := user.Current(); err == nil && u.Uid == `0` {
-		manager.ChildLogDir = `/var/log/procwatch`
-	} else {
-		manager.ChildLogDir, _ = pathutil.ExpandUser(`~/.cache/procwatch`)
 	}
 
 	// register the log intercept function for this manager
@@ -107,6 +110,18 @@ func (self *Manager) Initialize() error {
 		} else {
 			return err
 		}
+	}
+
+	if self.ChildLogDir == `` {
+		if u, err := user.Current(); err == nil && u.Uid == `0` {
+			self.ChildLogDir = `/var/log/procwatch`
+		} else {
+			self.ChildLogDir, _ = pathutil.ExpandUser(`~/.cache/procwatch`)
+		}
+	}
+
+	if self.LogFile == `` {
+		self.LogFile = filepath.Join(self.ChildLogDir, `procwatch.log`)
 	}
 
 	if self.LogFileMaxBytes != `` {
