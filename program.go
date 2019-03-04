@@ -13,7 +13,9 @@ import (
 	"github.com/ghetzel/go-stockutil/fileutil"
 	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/mathutil"
+	"github.com/ghetzel/go-stockutil/sliceutil"
 	"github.com/ghetzel/go-stockutil/stringutil"
+	"github.com/ghetzel/go-stockutil/typeutil"
 	"github.com/go-cmd/cmd"
 	"github.com/go-ini/ini"
 	"github.com/mattn/go-shellwords"
@@ -72,7 +74,7 @@ type Program struct {
 	LoadIndex             int           `ini:"-"`
 	State                 ProgramState  `ini:"-"`
 	ProcessID             int           `ini:"-"`
-	Command               string        `json:"command"                           ini:"command"`
+	Command               interface{}   `json:"command"                           ini:"command"`
 	ProcessName           string        `json:"process_name,omitempty"            ini:"process_name,omitempty"`
 	NumProcs              int           `json:"numprocs,omitempty"                ini:"numprocs,omitempty"`
 	Directory             string        `json:"directory,omitempty"               ini:"directory,omitempty"`
@@ -424,11 +426,23 @@ func (self *Program) startProcess() error {
 		return fmt.Errorf("Program in wrong state (wanted: STARTING, got: %s)", self.GetState())
 	}
 
-	shwords := shellwords.NewParser()
-	shwords.ParseEnv = true
-	shwords.ParseBacktick = false
+	var words []string
 
-	if words, err := shwords.Parse(self.Command); err == nil {
+	if typeutil.IsArray(self.Command) {
+		words = sliceutil.Stringify(self.Command)
+	} else {
+		shwords := shellwords.NewParser()
+		shwords.ParseEnv = true
+		shwords.ParseBacktick = false
+
+		if w, err := shwords.Parse(typeutil.String(self.Command)); err == nil {
+			words = w
+		} else {
+			return err
+		}
+	}
+
+	if len(words) > 0 {
 		// expand all tildes into the current user's home directory
 		for i, word := range words {
 			if strings.HasPrefix(word, `~`) {
@@ -491,7 +505,7 @@ func (self *Program) startProcess() error {
 			return status.Error
 		}
 	} else {
-		return err
+		return fmt.Errorf("Empty command specified")
 	}
 }
 

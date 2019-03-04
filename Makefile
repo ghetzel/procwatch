@@ -10,6 +10,7 @@ deps:
 	@go list github.com/mjibson/esc || go get github.com/mjibson/esc/...
 	go generate -x
 	go get -tags nocgo ./...
+	-go mod tidy
 
 clean:
 	-rm -rf bin

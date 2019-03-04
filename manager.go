@@ -15,6 +15,7 @@ import (
 	"github.com/ghetzel/go-stockutil/mathutil"
 	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/go-stockutil/sliceutil"
+	"github.com/ghetzel/go-stockutil/structutil"
 	"github.com/go-ini/ini"
 	"github.com/natefinch/lumberjack"
 )
@@ -85,30 +86,32 @@ func NewManagerFromConfig(configFile string) *Manager {
 
 func (self *Manager) Initialize() error {
 	// load main config
-	if err := self.loadConfigFromFile(self.ConfigFile); err != nil {
-		return err
-	}
+	if self.ConfigFile != `` {
+		if err := self.loadConfigFromFile(self.ConfigFile); err != nil {
+			return err
+		}
 
-	// load included configs (if any were specified in the main config)
-	for _, includeGlob := range self.includes {
-		if include, err := pathutil.ExpandUser(includeGlob); err == nil {
-			if matches, err := filepath.Glob(include); err == nil {
-				for _, includedConfig := range matches {
-					if sliceutil.ContainsString(self.loadedConfigs, includedConfig) {
-						return fmt.Errorf("Already loaded configuration at %s", includedConfig)
-					}
+		// load included configs (if any were specified in the main config)
+		for _, includeGlob := range self.includes {
+			if include, err := pathutil.ExpandUser(includeGlob); err == nil {
+				if matches, err := filepath.Glob(include); err == nil {
+					for _, includedConfig := range matches {
+						if sliceutil.ContainsString(self.loadedConfigs, includedConfig) {
+							return fmt.Errorf("Already loaded configuration at %s", includedConfig)
+						}
 
-					if err := self.loadConfigFromFile(includedConfig); err == nil {
-						self.loadedConfigs = append(self.loadedConfigs, includedConfig)
-					} else {
-						return err
+						if err := self.loadConfigFromFile(includedConfig); err == nil {
+							self.loadedConfigs = append(self.loadedConfigs, includedConfig)
+						} else {
+							return err
+						}
 					}
+				} else {
+					return err
 				}
 			} else {
 				return err
 			}
-		} else {
-			return err
 		}
 	}
 
@@ -146,9 +149,16 @@ func (self *Manager) Initialize() error {
 	return nil
 }
 
-func (self *Manager) AddProgram(program *Program) {
-	program.LoadIndex = len(self.programs)
-	self.programs = append(self.programs, program)
+func (self *Manager) AddProgram(program *Program) error {
+	newprogram := NewProgram(program.Name, self)
+
+	if err := structutil.CopyNonZero(newprogram, program); err == nil {
+		newprogram.LoadIndex = len(self.programs)
+		self.programs = append(self.programs, newprogram)
+		return nil
+	} else {
+		return err
+	}
 }
 
 func (self *Manager) loadConfigFromFile(filename string) error {
