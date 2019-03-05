@@ -11,9 +11,9 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/ghetzel/go-stockutil/convutil"
+	"github.com/ghetzel/go-stockutil/fileutil"
 	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/mathutil"
-	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/go-stockutil/sliceutil"
 	"github.com/ghetzel/go-stockutil/structutil"
 	"github.com/go-ini/ini"
@@ -93,7 +93,7 @@ func (self *Manager) Initialize() error {
 
 		// load included configs (if any were specified in the main config)
 		for _, includeGlob := range self.includes {
-			if include, err := pathutil.ExpandUser(includeGlob); err == nil {
+			if include, err := fileutil.ExpandUser(includeGlob); err == nil {
 				if matches, err := filepath.Glob(include); err == nil {
 					for _, includedConfig := range matches {
 						if sliceutil.ContainsString(self.loadedConfigs, includedConfig) {
@@ -119,7 +119,7 @@ func (self *Manager) Initialize() error {
 		if u, err := user.Current(); err == nil && u.Uid == `0` {
 			self.ChildLogDir = `/var/log/procwatch`
 		} else {
-			self.ChildLogDir, _ = pathutil.ExpandUser(`~/.cache/procwatch`)
+			self.ChildLogDir, _ = fileutil.ExpandUser(`~/.cache/procwatch`)
 		}
 	}
 
@@ -162,6 +162,7 @@ func (self *Manager) AddProgram(program *Program) error {
 }
 
 func (self *Manager) loadConfigFromFile(filename string) error {
+	filename = fileutil.MustExpandUser(filename)
 	log.Infof("Loading configuration file: %s", filename)
 
 	if data, err := ioutil.ReadFile(filename); err == nil {
