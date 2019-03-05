@@ -8,9 +8,9 @@ require (
 	github.com/fatih/color v1.7.0
 	github.com/ghetzel/cli v1.17.0
 	github.com/ghetzel/diecast v1.10.16
-	github.com/ghetzel/go-stockutil v1.7.23
+	github.com/ghetzel/go-stockutil v1.7.24
 	github.com/go-cmd/cmd v1.0.4
-	github.com/go-ini/ini v1.41.0
+	github.com/go-ini/ini v1.42.0
 	github.com/go-test/deep v1.0.1 // indirect
 	github.com/husobee/vestigo v1.1.0
 	github.com/jroimartin/gocui v0.4.0

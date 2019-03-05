@@ -173,6 +173,8 @@ func (self *Manager) loadConfigFromFile(filename string) error {
 			for _, program := range loaded {
 				self.AddProgram(program)
 			}
+		} else {
+			return err
 		}
 	} else {
 		return err

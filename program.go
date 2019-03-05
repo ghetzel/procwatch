@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/ghetzel/go-stockutil/executil"
 	"github.com/ghetzel/go-stockutil/fileutil"
 	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/mathutil"
@@ -74,7 +75,7 @@ type Program struct {
 	LoadIndex             int           `ini:"-"`
 	State                 ProgramState  `ini:"-"`
 	ProcessID             int           `ini:"-"`
-	Command               interface{}   `json:"command"                           ini:"command"`
+	Command               interface{}   `json:"command"`
 	ProcessName           string        `json:"process_name,omitempty"            ini:"process_name,omitempty"`
 	NumProcs              int           `json:"numprocs,omitempty"                ini:"numprocs,omitempty"`
 	Directory             string        `json:"directory,omitempty"               ini:"directory,omitempty"`
@@ -103,6 +104,7 @@ type Program struct {
 	StderrEventsEnabled   bool          `json:"stderr_events_enabled,omitempty"   ini:"stderr_events_enabled,omitempty"`
 	Environment           []string      `json:"environment,omitempty"             delim:"," ini:"environment,omitempty" delim:","`
 	ServerUrl             string        `json:"serverurl,omitempty"               ini:"serverurl,omitempty"`
+	CommandString         string        `json:"-"                                 ini:"command"`
 	// Pidfile               string        `json:"pidfile"                           ini:"pidfile"`
 	LastExitStatus     int
 	LastStartedAt      time.Time
@@ -119,20 +121,21 @@ func LoadProgramsFromConfig(data []byte, manager *Manager) (map[string]*Program,
 	programs := make(map[string]*Program)
 
 	if iniFile, err := ini.Load(data); err == nil {
-		loadedPrograms := 0
-
 		for _, section := range iniFile.Sections() {
-			if strings.HasPrefix(section.Name(), `program:`) {
-				parts := strings.SplitN(section.Name(), `:`, 2)
 
-				program := NewProgram(parts[1], manager)
+			if strings.HasPrefix(section.Name(), `program:`) {
+				_, name := stringutil.SplitPair(section.Name(), `:`)
+				program := new(Program)
 
 				if err := section.MapTo(program); err == nil {
-					program.LoadIndex = loadedPrograms
-					programs[program.Name] = program
-					loadedPrograms += 1
+					program.Name = name
+					program.Command = program.CommandString
+
+					if err := manager.AddProgram(program); err != nil {
+						return nil, fmt.Errorf("program:%v: %v", err)
+					}
 				} else {
-					return nil, err
+					return nil, fmt.Errorf("program:%v: %v", err)
 				}
 			}
 		}
@@ -443,11 +446,12 @@ func (self *Program) startProcess() error {
 	}
 
 	if len(words) > 0 {
-		// expand all tildes into the current user's home directory
 		for i, word := range words {
-			if strings.HasPrefix(word, `~`) {
-				words[i], _ = fileutil.ExpandUser(word)
-			}
+			// expand all tildes into the current user's home directory
+			words[i], _ = fileutil.ExpandUser(word)
+
+			// expand environment variables
+			words[i] = os.ExpandEnv(words[i])
 		}
 
 		cmd := cmd.NewCmdOptions(cmd.Options{
@@ -469,6 +473,7 @@ func (self *Program) startProcess() error {
 			}
 		}()
 
+		log.Debugf("[%s] command: %s", self.Name, executil.Join(words))
 		cmd.Start()
 
 		if status := cmd.Status(); status.Error == nil {
@@ -482,7 +487,9 @@ func (self *Program) startProcess() error {
 			self.processLock.Unlock()
 			// ---------------------------------------------------------------------
 
-			log.Debugf("[%s] Program started: pid=%d command=%v %+v", self.Name, self.ProcessID, words[0], stringutil.WrapEach(words[1:], `'`, `'`))
+			if self.ProcessID > 0 {
+				log.Debugf("[%s] Program started: pid=%d", self.Name, self.ProcessID)
+			}
 
 			go self.monitorProcess()
 
@@ -519,9 +526,9 @@ func (self *Program) monitorProcess() {
 		status := process.Status()
 
 		if status.Error == nil {
-			log.Debugf("[%s] PID %d exited with code %d", self.Name, status.PID, status.Exit)
+			log.Debugf("[%s] PID %d exited with status %d", self.Name, status.PID, status.Exit)
 		} else {
-			log.Warningf("[%s] PID %d exited with code %d: %v", self.Name, status.PID, status.Exit, status.Error)
+			log.Warningf("[%s] PID %d exited with status %d: %v", self.Name, status.PID, status.Exit, status.Error)
 		}
 
 		// update the last known exit status
