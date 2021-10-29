@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -100,7 +102,24 @@ func (f *_escFile) Close() error {
 }
 
 func (f *_escFile) Readdir(count int) ([]os.FileInfo, error) {
-	return nil, nil
+	if !f.isDir {
+		return nil, fmt.Errorf(" escFile.Readdir: '%s' is not directory", f.name)
+	}
+
+	fis, ok := _escDirs[f.local]
+	if !ok {
+		return nil, fmt.Errorf(" escFile.Readdir: '%s' is directory, but we have no info about content of this dir, local=%s", f.name, f.local)
+	}
+	limit := count
+	if count <= 0 || limit > len(fis) {
+		limit = len(fis)
+	}
+
+	if len(fis) == 0 && count > 0 {
+		return nil, io.EOF
+	}
+
+	return fis[0:limit], nil
 }
 
 func (f *_escFile) Stat() (os.FileInfo, error) {
@@ -191,6 +210,7 @@ func FSMustString(useLocal bool, name string) string {
 var _escData = map[string]*_escFile{
 
 	"/_layouts/default.html": {
+		name:    "default.html",
 		local:   "ui/_layouts/default.html",
 		size:    3802,
 		modtime: 1500000000,
@@ -223,6 +243,7 @@ MCvntBnnsDxdjafsHlZYX7EKactOv1sOMOb3FpdOd6bM22vD5GSazc284ZPdWPDhOMqdp+/2uNDZfkBd
 	},
 
 	"/config.html": {
+		name:    "config.html",
 		local:   "ui/config.html",
 		size:    379,
 		modtime: 1500000000,
@@ -235,6 +256,7 @@ mLSE4OS+0mu5/XCBHsB63KL/JSvrUDP62M4ZxD1K+QsAAP//WxgUmnsBAAA=
 	},
 
 	"/css/app.css": {
+		name:    "app.css",
 		local:   "ui/css/app.css",
 		size:    1627,
 		modtime: 1500000000,
@@ -253,6 +275,7 @@ dInuZyJK8lRX2kCT7W8AAAD//9fFyxJbBgAA
 	},
 
 	"/css/bootstrap.min.css": {
+		name:    "bootstrap.min.css",
 		local:   "ui/css/bootstrap.min.css",
 		size:    153182,
 		modtime: 1500000000,
@@ -642,6 +665,7 @@ L6O6XmZBaf3hy/8fAAD///IZSjdeVgIA
 	},
 
 	"/css/bootstrap.min.css.map": {
+		name:    "bootstrap.min.css.map",
 		local:   "ui/css/bootstrap.min.css.map",
 		size:    608808,
 		modtime: 1500000000,
@@ -2278,6 +2302,7 @@ nPfWXx7+3wAAAP//W7KgryhKCQA=
 	},
 
 	"/css/font-awesome.min.css": {
+		name:    "font-awesome.min.css",
 		local:   "ui/css/font-awesome.min.css",
 		size:    30999,
 		modtime: 1500000000,
@@ -2401,6 +2426,7 @@ tW742zXqbWpRb1fmEsYm9Zjv/xEAAP//76bBlxd5AAA=
 	},
 
 	"/fonts/FontAwesome.otf": {
+		name:    "FontAwesome.otf",
 		local:   "ui/fonts/FontAwesome.otf",
 		size:    134808,
 		modtime: 1500000000,
@@ -4272,6 +4298,7 @@ jjCDNtq5/25Jr8U9fXDJNgYimiHPuJ395ekO//4fAAD//zGhgsKYDgIA
 	},
 
 	"/fonts/fontawesome-webfont.eot": {
+		name:    "fontawesome-webfont.eot",
 		local:   "ui/fonts/fontawesome-webfont.eot",
 		size:    165742,
 		modtime: 1500000000,
@@ -5938,6 +5965,7 @@ EEJFyhdvQICfRYCYuW9T0vfpn3R8QzJ7+/GqxS00frV17NH/LwAA//9PcB26bocCAA==
 	},
 
 	"/fonts/fontawesome-webfont.svg": {
+		name:    "fontawesome-webfont.svg",
 		local:   "ui/fonts/fontawesome-webfont.svg",
 		size:    444379,
 		modtime: 1500000000,
@@ -8160,6 +8188,7 @@ FdEvv/7oUA+VjS+//ehQD7nOL7//6FAP+YQvf/zoUA/h65cv3z/U9uXf//3L/v/+un01WE3pw8H+9V/+
 	},
 
 	"/fonts/fontawesome-webfont.ttf": {
+		name:    "fontawesome-webfont.ttf",
 		local:   "ui/fonts/fontawesome-webfont.ttf",
 		size:    165548,
 		modtime: 1500000000,
@@ -9825,6 +9854,7 @@ FLp9Ct0+ha6iYX2KhvX1KXT7FLp9Ct0+hW6fQrdPodun0O1T6PYrdPsVuv0K3X6Fbr9Ct1+h26/Q7aeS
 	},
 
 	"/fonts/fontawesome-webfont.woff": {
+		name:    "fontawesome-webfont.woff",
 		local:   "ui/fonts/fontawesome-webfont.woff",
 		size:    98024,
 		modtime: 1500000000,
@@ -11466,6 +11496,7 @@ Yc3SlFxPim8oxZ3hLfa2ZLv5n9VT4mHWald7hrfa25L9puYkd6WnOctT42E2WpWS/ayGMnelpDnLTSN5
 	},
 
 	"/fonts/fontawesome-webfont.woff2": {
+		name:    "fontawesome-webfont.woff2",
 		local:   "ui/fonts/fontawesome-webfont.woff2",
 		size:    77160,
 		modtime: 1500000000,
@@ -12761,6 +12792,7 @@ akiI/xcAAP//p8MXVWgtAQA=
 	},
 
 	"/img/icon-24-inverse.png": {
+		name:    "icon-24-inverse.png",
 		local:   "ui/img/icon-24-inverse.png",
 		size:    638,
 		modtime: 1500000000,
@@ -12781,6 +12813,7 @@ bEJ+AgAA
 	},
 
 	"/img/procwatch-24-text-inverse.png": {
+		name:    "procwatch-24-text-inverse.png",
 		local:   "ui/img/procwatch-24-text-inverse.png",
 		size:    1303,
 		modtime: 1500000000,
@@ -12812,6 +12845,7 @@ AP//CJP0LhcFAAA=
 	},
 
 	"/img/procwatch-24-text.png": {
+		name:    "procwatch-24-text.png",
 		local:   "ui/img/procwatch-24-text.png",
 		size:    2077,
 		modtime: 1500000000,
@@ -12856,6 +12890,7 @@ ZR0IAAA=
 	},
 
 	"/index.html": {
+		name:    "index.html",
 		local:   "ui/index.html",
 		size:    113,
 		modtime: 1500000000,
@@ -12866,6 +12901,7 @@ yPGCry7VBiB2iTRx9iZ1pdJ/pdwf7wg98/LMw+kv2pkaQ3yl6zQRbEupNjb4BAAA//8g8pfccQAAAA==
 	},
 
 	"/js/app.js": {
+		name:    "app.js",
 		local:   "ui/js/app.js",
 		size:    5924,
 		modtime: 1500000000,
@@ -12902,6 +12938,7 @@ dbp6uxpc0tor2ZzxuZpfvkWTszbmsarBx9nmW1T3n2KImP8TAAD//3Z9E5IkFwAA
 	},
 
 	"/js/bootstrap-notify.min.js": {
+		name:    "bootstrap-notify.min.js",
 		local:   "ui/js/bootstrap-notify.min.js",
 		size:    8122,
 		modtime: 1500000000,
@@ -12955,6 +12992,7 @@ AAD//92cDHW6HwAA
 	},
 
 	"/js/bootstrap.min.js": {
+		name:    "bootstrap.min.js",
 		local:   "ui/js/bootstrap.min.js",
 		size:    55775,
 		modtime: 1500000000,
@@ -13205,6 +13243,7 @@ D8mHZD6nbHJ9cYLvzErFM8riz0U8S+b/NwAA//8+7Nym39kAAA==
 	},
 
 	"/js/bootstrap.min.js.map": {
+		name:    "bootstrap.min.js.map",
 		local:   "ui/js/bootstrap.min.js.map",
 		size:    181825,
 		modtime: 1500000000,
@@ -13923,6 +13962,7 @@ aZiwWJfUSuTmYKRJhJUUVEgIdxW54b+OoyvxPyMl8i+Z2erhLHt+/vB/AwAA//+pnzRGQcYCAA==
 	},
 
 	"/js/jquery.min.js": {
+		name:    "jquery.min.js",
 		local:   "ui/js/jquery.min.js",
 		size:    86709,
 		modtime: 1500000000,
@@ -14436,6 +14476,7 @@ tVIBAA==
 	},
 
 	"/js/stapes.min.js": {
+		name:    "stapes.min.js",
 		local:   "ui/js/stapes.min.js",
 		size:    6397,
 		modtime: 1500000000,
@@ -14481,6 +14522,7 @@ XBnfzMjiFu0TEP9z3V5705lcZmH1dSfdT2t8aM/29oMPbFLUw1fetEVdhaS3L8/85VQ3sp3fHGxsH7XQ
 	},
 
 	"/js/tether.min.js": {
+		name:    "tether.min.js",
 		local:   "ui/js/tether.min.js",
 		size:    24900,
 		modtime: 1500000000,
@@ -14614,6 +14656,7 @@ DjN9tCCmVhCLGvtUShdMkEEw4fT7iXjPCQ8jCXw2nRP9z+HAZ5O5e9HAISefTcZ/xkiuLStJcm30sc43
 	},
 
 	"/programs/_current.html": {
+		name:    "_current.html",
 		local:   "ui/programs/_current.html",
 		size:    2337,
 		modtime: 1500000000,
@@ -14634,37 +14677,98 @@ jqq5M791D6mUVUM/AgAA//+e7FToIQkAAA==
 	},
 
 	"/": {
+		name:  "/",
+		local: `ui`,
 		isDir: true,
-		local: "ui",
 	},
 
 	"/_layouts": {
+		name:  "_layouts",
+		local: `ui/_layouts`,
 		isDir: true,
-		local: "ui/_layouts",
 	},
 
 	"/css": {
+		name:  "css",
+		local: `ui/css`,
 		isDir: true,
-		local: "ui/css",
 	},
 
 	"/fonts": {
+		name:  "fonts",
+		local: `ui/fonts`,
 		isDir: true,
-		local: "ui/fonts",
 	},
 
 	"/img": {
+		name:  "img",
+		local: `ui/img`,
 		isDir: true,
-		local: "ui/img",
 	},
 
 	"/js": {
+		name:  "js",
+		local: `ui/js`,
 		isDir: true,
-		local: "ui/js",
 	},
 
 	"/programs": {
+		name:  "programs",
+		local: `ui/programs`,
 		isDir: true,
-		local: "ui/programs",
+	},
+}
+
+var _escDirs = map[string][]os.FileInfo{
+
+	"ui": {
+		_escData["/_layouts"],
+		_escData["/config.html"],
+		_escData["/css"],
+		_escData["/fonts"],
+		_escData["/img"],
+		_escData["/index.html"],
+		_escData["/js"],
+		_escData["/programs"],
+	},
+
+	"ui/_layouts": {
+		_escData["/_layouts/default.html"],
+	},
+
+	"ui/css": {
+		_escData["/css/app.css"],
+		_escData["/css/bootstrap.min.css"],
+		_escData["/css/bootstrap.min.css.map"],
+		_escData["/css/font-awesome.min.css"],
+	},
+
+	"ui/fonts": {
+		_escData["/fonts/FontAwesome.otf"],
+		_escData["/fonts/fontawesome-webfont.eot"],
+		_escData["/fonts/fontawesome-webfont.svg"],
+		_escData["/fonts/fontawesome-webfont.ttf"],
+		_escData["/fonts/fontawesome-webfont.woff"],
+		_escData["/fonts/fontawesome-webfont.woff2"],
+	},
+
+	"ui/img": {
+		_escData["/img/icon-24-inverse.png"],
+		_escData["/img/procwatch-24-text-inverse.png"],
+		_escData["/img/procwatch-24-text.png"],
+	},
+
+	"ui/js": {
+		_escData["/js/app.js"],
+		_escData["/js/bootstrap-notify.min.js"],
+		_escData["/js/bootstrap.min.js"],
+		_escData["/js/bootstrap.min.js.map"],
+		_escData["/js/jquery.min.js"],
+		_escData["/js/stapes.min.js"],
+		_escData["/js/tether.min.js"],
+	},
+
+	"ui/programs": {
+		_escData["/programs/_current.html"],
 	},
 }

@@ -2,15 +2,14 @@
 .EXPORT_ALL_VARIABLES:
 
 GO111MODULE     ?= on
+CGO_ENABLED      = 0
 LOCALS          := $(shell find . -type f -name '*.go' 2> /dev/null)
 
 all: deps fmt build
 
 deps:
-	@go list github.com/mjibson/esc || go get github.com/mjibson/esc/...
 	go generate -x
-	go get -tags nocgo ./...
-	-go mod tidy
+	go mod tidy
 
 clean:
 	-rm -rf bin
