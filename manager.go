@@ -36,6 +36,8 @@ type Manager struct {
 	StderrLogfileMaxBytes string      `json:"stderr_logfile_maxbytes" ini:"stderr_logfile_maxbytes"`
 	StderrLogfileBackups  int         `json:"stderr_logfile_backups"  ini:"stderr_logfile_backups"`
 	StdoutLogfileBackups  int         `json:"stdout_logfile_backups"  ini:"stdout_logfile_backups"`
+	DefaultStdoutLogfile  string      `json:"stdout_logfile"          ini:"stdout_logfile"`
+	DefaultStderrLogfile  string      `json:"stderr_logfile"          ini:"stderr_logfile"`
 	Events                chan *Event `json:"-"`
 	Server                *Server
 	includes              []string
@@ -265,7 +267,7 @@ func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGro
 		// first-time start for autostart programs
 		if program.AutoStart && !program.HasEverBeenStarted() {
 			log.Debugf("[%s] Starting program for the first time", program.Name)
-			program.LastTriggeredAt = time.Now()
+			program.ShouldAutoRestart() // do this here to "seed" the scheduler with the first schedule time
 			program.Start()
 		}
 

@@ -190,16 +190,16 @@ func (self *Dashboard) renderLog(w io.Writer) {
 }
 
 func (self *Dashboard) scanAndEmitLogBuffer() {
-	var scanner = bufio.NewScanner(self.lineBuffer)
-
 	for {
+		var scanner = bufio.NewScanner(self.lineBuffer)
+
 		for scanner.Scan() {
 			if line := strings.TrimSpace(scanner.Text()); line != `` {
 				self.lines = append(self.lines, line)
 			}
 		}
 
-		time.Sleep(time.Second)
+		time.Sleep(125 * time.Millisecond)
 	}
 }
 

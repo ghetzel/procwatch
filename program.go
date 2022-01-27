@@ -14,6 +14,7 @@ import (
 	"github.com/ghetzel/go-stockutil/fileutil"
 	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/mathutil"
+	"github.com/ghetzel/go-stockutil/rxutil"
 	"github.com/ghetzel/go-stockutil/sliceutil"
 	"github.com/ghetzel/go-stockutil/stringutil"
 	"github.com/ghetzel/go-stockutil/typeutil"
@@ -161,11 +162,11 @@ func NewProgram(name string, manager *Manager) *Program {
 		ExitCodes:             []int{0, 2},
 		StopSignal:            `TERM`,
 		StopWaitSeconds:       10,
-		StdoutLogfile:         `AUTO`,
+		StdoutLogfile:         typeutil.OrString(manager.DefaultStdoutLogfile, `AUTO`),
 		RedirectStderr:        manager.RedirectStderr,
 		StdoutLogfileMaxBytes: manager.StdoutLogfileMaxBytes,
 		StdoutLogfileBackups:  manager.StdoutLogfileBackups,
-		StderrLogfile:         `AUTO`,
+		StderrLogfile:         typeutil.OrString(manager.DefaultStderrLogfile, `AUTO`),
 		StderrLogfileMaxBytes: manager.StderrLogfileMaxBytes,
 		StderrLogfileBackups:  manager.StderrLogfileBackups,
 		Environment:           make([]string, 0),
@@ -195,7 +196,23 @@ func (self *Program) String() string {
 	return ``
 }
 
+func (self *Program) detectLevel(line string) log.Level {
+	var iline = strings.ToLower(line)
+
+	if rxutil.IsMatchString(`(error|critical|fail)`, iline) {
+		return log.ERROR
+	} else if rxutil.IsMatchString(`warn`, iline) {
+		return log.WARNING
+	} else if rxutil.IsMatchString(`debug`, iline) {
+		return log.DEBUG
+	} else {
+		return log.INFO
+	}
+}
+
 func (self *Program) Log(line string, stdout bool) {
+	log.Logf(self.detectLevel(line), "[%s] \u25b8  %s", self.Name, line)
+
 	var logfile string
 	var suffix string
 
@@ -293,13 +310,10 @@ func (self *Program) ShouldAutoRestart() bool {
 			return false
 		}
 
-		self.NextScheduledAt = schedule.Next(self.LastTriggeredAt)
-
-		if now.After(self.NextScheduledAt) {
+		if next := schedule.Next(now); !self.NextScheduledAt.Equal(next) {
+			self.NextScheduledAt = next
 			self.LastTriggeredAt = now
-			log.Debugf("[%s] Starting because schedule is due.", self.Name)
-			log.Debugf("[%s] Next scheduled at %v", self.Name, self.NextScheduledAt)
-
+			log.Debugf("[%s] Scheduled start, next scheduled to start at %v", self.Name, self.NextScheduledAt)
 			return true
 		} else {
 			return false
