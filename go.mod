@@ -2,12 +2,6 @@ module github.com/ghetzel/procwatch
 
 go 1.17
 
-replace (
-	k8s.io/api => k8s.io/api v0.19.1
-	k8s.io/apimachinery => k8s.io/apimachinery v0.19.1
-	k8s.io/client-go => k8s.io/client-go v0.19.1
-)
-
 require (
 	github.com/NonerKao/color-aware-tabwriter v0.0.0-20171005123016-aa1eec33dba0
 	github.com/c-bata/go-prompt v0.2.2 // indirect
