@@ -1,73 +1,72 @@
 ---
 bindings:
-- name:     programs
-  resource: /api/programs
+-   name:     "programs"
+    resource: "/api/programs"
 ---
 <div class="card">
-  <div class="card-header">
-    Programs
-  </div>
-  {{ if $.bindings.programs }}
-  <table class="table table-sm">
-    <thead>
-      <tr>
-        <th class="col-sm-2">State</th>
-        <th class="col-sm-3">Name</th>
-        <th class="col-sm-1">PID</th>
-        <th class="col-sm-2">Uptime</th>
-        <th class="col-sm-4">&nbsp;</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{ range $program := $.bindings.programs }}
-      <tr>
-        <td class="col-sm-2">{{ $program.State }}</td>
-        <td class="col-sm-3">{{ $program.Name }}</td>
-        <td class="col-sm-1">{{ or $program.ProcessID (sanitize "&mdash;") }}</td>
-        <td class="col-sm-2">
-          {{ if and (eq $program.State `RUNNING`) $program.LastStartedAt }}
-              {{ since $program.LastStartedAt `second` }}
-          {{ else if any $program.State `EXITED` `FATAL` `BACKOFF` }}
-              exited {{ $program.LastExitStatus }} ({{ since $program.LastExitedAt "s" }} ago)
-          {{ end }}
-        </td>
-        <td class="col-sm-4 text-right">
-            <button
-                class="btn btn-sm btn-success"
-                onclick="procwatch.actionProgram('{{ $program.Name }}', 'start')"
-                href="#"
-                {{ if eq $program.State "RUNNING" }}disabled="disabled"{{ end }}
-            >
-              <i class="fa fa-play"></i> Start
-            </button>
+    <div class="card-header">
+        Programs
+    </div>
+    {{ if $.bindings.programs }}
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th class="col-sm-1">State</th>
+                <th class="col-sm-2">Name</th>
+                <th class="col-sm-1">PID</th>
+                <th class="col-sm-2">Uptime</th>
+                <th class="col-sm-2">Next Run</th>
+                <th class="col-sm-3">&nbsp;</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range $program := $.bindings.programs }}
+            <tr>
+                <td>{{ $program.state }}</td>
+                <td>{{ $program.name }}</td>
+                <td>{{ or $program.pid (sanitize "&mdash;") }}</td>
+                <td>
+                {{ if and (eq $program.state `RUNNING`) $program.last_started_at }}
+                    {{ since $program.last_started_at `second` }}
+                {{ else if any $program.state `EXITED` `FATAL` `BACKOFF` }}
+                    exited {{ $program.last_exit_status }} ({{ since $program.last_exited_at "s" }} ago)
+                {{ end }}
+                </td>
+                <td>
+                    {{ if isZero $program.next_scheduled_at }}
+                    &mdash;
+                    {{ else }}
+                    {{ since $program.next_scheduled_at }}
+                    {{ end }}
+                </td>
+                <td class="text-right">
+                    <button class="btn btn-sm btn-success"
+                        onclick="procwatch.actionProgram('{{ $program.name }}', 'start')" href="#"
+                        {{ if eq $program.state "RUNNING" }}disabled="disabled" {{ end }}>
+                        <i class="fa fa-play"></i> Start
+                    </button>
 
-            <button
-                class="btn btn-sm btn-warning"
-                onclick="procwatch.actionProgram('{{ $program.Name }}', 'restart')"
-                href="#"
-                {{ if ne $program.State "RUNNING" }}disabled="disabled"{{ end }}
-            >
-              <i class="fa fa-refresh"></i> Restart
-            </button>
+                    <button class="btn btn-sm btn-warning"
+                        onclick="procwatch.actionProgram('{{ $program.name }}', 'restart')" href="#"
+                        {{ if ne $program.state "RUNNING" }}disabled="disabled" {{ end }}>
+                        <i class="fa fa-refresh"></i> Restart
+                    </button>
 
-            <button
-                class="btn btn-sm btn-danger"
-                onclick="procwatch.actionProgram('{{ $program.Name }}', 'stop')"
-                href="#"
-                {{ if ne $program.State "RUNNING" }}disabled="disabled"{{ end }}
-            >
-              <i class="fa fa-stop"></i> Stop
-            </button>
-        </td>
-      </tr>
-      {{ end }}
-    </tbody>
-  </table>
-  {{ else }}
-  <div class="card-block">
-    <p class="card-text">
-      No programs are configured.
-    </p>
-  </div>
-  {{ end }}
+                    <button class="btn btn-sm btn-danger"
+                        onclick="procwatch.actionProgram('{{ $program.name }}', 'stop')" href="#"
+                        {{ if ne $program.state "RUNNING" }}disabled="disabled" {{ end }}>
+                        <i class="fa fa-stop"></i> Stop
+                    </button>
+                </td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+    {{ else }}
+    <div class="card-block">
+        <p class="card-text">
+            No programs are configured.
+        </p>
+    </div>
+    {{ end }}
 </div>

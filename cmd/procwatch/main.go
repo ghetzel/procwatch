@@ -128,11 +128,9 @@ func main() {
 			go manager.Run()
 
 			if c.Bool(`dashboard`) {
-				dashboard := NewDashboard(manager)
-
-				if err := dashboard.Run(); err != nil {
-					log.Fatal(err)
-				}
+				var dashboard = NewDashboard(manager)
+				log.SetOutput(dashboard)
+				log.FatalIf(dashboard.Run())
 			}
 
 			manager.Wait()

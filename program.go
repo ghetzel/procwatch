@@ -21,6 +21,7 @@ import (
 	"github.com/go-ini/ini"
 	"github.com/mattn/go-shellwords"
 	"github.com/natefinch/lumberjack"
+	"github.com/robfig/cron"
 )
 
 const MaxProcessKillWaitTime = (5 * time.Second)
@@ -71,11 +72,11 @@ func (self ProgramSignal) Signal() os.Signal {
 }
 
 type Program struct {
-	Name                  string        `ini:"-"`
-	LoadIndex             int           `ini:"-"`
-	State                 ProgramState  `ini:"-"`
-	ProcessID             int           `ini:"-"`
-	Command               interface{}   `json:"command"`
+	Name                  string        `json:"name"                              ini:"-"`
+	LoadIndex             int           `json:"index"                             ini:"-"`
+	State                 ProgramState  `json:"state"                             ini:"-"`
+	ProcessID             int           `json:"pid"                               ini:"-"`
+	Command               interface{}   `json:"command"                           ini:"-"`
 	ProcessName           string        `json:"process_name,omitempty"            ini:"process_name,omitempty"`
 	NumProcs              int           `json:"numprocs,omitempty"                ini:"numprocs,omitempty"`
 	Directory             string        `json:"directory,omitempty"               ini:"directory,omitempty"`
@@ -104,38 +105,39 @@ type Program struct {
 	StderrEventsEnabled   bool          `json:"stderr_events_enabled,omitempty"   ini:"stderr_events_enabled,omitempty"`
 	Environment           []string      `json:"environment,omitempty"             delim:"," ini:"environment,omitempty" delim:","`
 	ServerUrl             string        `json:"serverurl,omitempty"               ini:"serverurl,omitempty"`
+	Schedule              string        `json:"schedule,omitempty"                ini:"schedule,omitempty"`
 	CommandString         string        `json:"-"                                 ini:"command"`
-	// Pidfile               string        `json:"pidfile"                           ini:"pidfile"`
-	LastExitStatus     int
-	LastStartedAt      time.Time
-	LastExitedAt       time.Time
-	processRetryCount  int
-	manager            *Manager
-	cmd                *cmd.Cmd
-	hasEverBeenStarted bool
-	processLock        sync.Mutex
-	rollingLogger      *lumberjack.Logger
+	LastExitStatus        int           `json:"last_exit_status,omitempty"        ini:"-"`
+	LastStartedAt         time.Time     `json:"last_started_at,omitempty"         ini:"-"`
+	LastExitedAt          time.Time     `json:"last_exited_at,omitempty"          ini:"-"`
+	LastTriggeredAt       time.Time     `json:"last_triggered_at,omitempty"       ini:"-"`
+	NextScheduledAt       time.Time     `json:"next_scheduled_at,omitempty"       ini:"-"`
+	processRetryCount     int
+	manager               *Manager
+	cmd                   *cmd.Cmd
+	hasEverBeenStarted    bool
+	processLock           sync.Mutex
+	rollingLogger         *lumberjack.Logger
 }
 
 func LoadProgramsFromConfig(data []byte, manager *Manager) (map[string]*Program, error) {
-	programs := make(map[string]*Program)
+	var programs = make(map[string]*Program)
 
 	if iniFile, err := ini.Load(data); err == nil {
 		for _, section := range iniFile.Sections() {
-
 			if strings.HasPrefix(section.Name(), `program:`) {
-				_, name := stringutil.SplitPair(section.Name(), `:`)
-				program := new(Program)
+				var _, name = stringutil.SplitPair(section.Name(), `:`)
+				var program = new(Program)
 
 				if err := section.MapTo(program); err == nil {
 					program.Name = name
 					program.Command = program.CommandString
 
 					if err := manager.AddProgram(program); err != nil {
-						return nil, fmt.Errorf("program:%v: %v", err)
+						return nil, fmt.Errorf("program:%v: %v", name, err)
 					}
 				} else {
-					return nil, fmt.Errorf("program:%v: %v", err)
+					return nil, fmt.Errorf("program:%v: %v", name, err)
 				}
 			}
 		}
@@ -277,12 +279,39 @@ func (self *Program) HasEverBeenStarted() bool {
 }
 
 func (self *Program) ShouldAutoRestart() bool {
+	var now = time.Now()
+
+	if cronstring := strings.TrimSpace(self.Schedule); cronstring != `` {
+		var schedule cron.Schedule
+
+		if s, err := cron.ParseStandard(cronstring); err == nil {
+			schedule = s
+		} else if s, err := cron.Parse(cronstring); err == nil {
+			schedule = s
+		} else {
+			log.Warningf("[%s] invalid schedule string %q - %v", self.Name, cronstring, err)
+			return false
+		}
+
+		self.NextScheduledAt = schedule.Next(self.LastTriggeredAt)
+
+		if now.After(self.NextScheduledAt) {
+			self.LastTriggeredAt = now
+			log.Debugf("[%s] Starting because schedule is due.", self.Name)
+			log.Debugf("[%s] Next scheduled at %v", self.Name, self.NextScheduledAt)
+
+			return true
+		} else {
+			return false
+		}
+	}
+
 	switch self.GetState() {
 	case ProgramFatal, ProgramStopped:
 		return false
 	}
 
-	autorestart := strings.ToLower(self.AutoRestart)
+	var autorestart = strings.ToLower(self.AutoRestart)
 
 	switch autorestart {
 	case `unexpected`:
@@ -377,7 +406,7 @@ func (self *Program) PID() int {
 }
 
 func (self *Program) InState(states ...ProgramState) bool {
-	currentState := self.GetState()
+	var currentState = self.GetState()
 
 	for _, state := range states {
 		if currentState == state {
@@ -410,7 +439,7 @@ func (self *Program) transitionTo(state ProgramState) {
 
 func (self *Program) isRunning() bool {
 	self.processLock.Lock()
-	process := self.cmd
+	var process = self.cmd
 	self.processLock.Unlock()
 
 	if process != nil {
@@ -434,7 +463,7 @@ func (self *Program) startProcess() error {
 	if typeutil.IsArray(self.Command) {
 		words = sliceutil.Stringify(self.Command)
 	} else {
-		shwords := shellwords.NewParser()
+		var shwords = shellwords.NewParser()
 		shwords.ParseEnv = true
 		shwords.ParseBacktick = false
 
@@ -454,7 +483,7 @@ func (self *Program) startProcess() error {
 			words[i] = os.ExpandEnv(words[i])
 		}
 
-		cmd := cmd.NewCmdOptions(cmd.Options{
+		var cmd = cmd.NewCmdOptions(cmd.Options{
 			Streaming: true,
 		}, words[0], words[1:]...)
 
@@ -494,7 +523,7 @@ func (self *Program) startProcess() error {
 			go self.monitorProcess()
 
 			if self.StartSeconds > 0 {
-				startDuration := time.Duration(self.StartSeconds) * time.Second
+				var startDuration = time.Duration(self.StartSeconds) * time.Second
 
 				select {
 				case <-time.After(startDuration):
@@ -518,12 +547,12 @@ func (self *Program) startProcess() error {
 
 func (self *Program) monitorProcess() {
 	self.processLock.Lock()
-	process := self.cmd
+	var process = self.cmd
 	self.processLock.Unlock()
 
 	if process != nil {
 		<-process.Done()
-		status := process.Status()
+		var status = process.Status()
 
 		if status.Error == nil {
 			log.Debugf("[%s] PID %d exited with status %d", self.Name, status.PID, status.Exit)
@@ -557,11 +586,11 @@ func (self *Program) monitorProcess() {
 func (self *Program) killProcess(force bool) error {
 	if self.InState(ProgramStarting, ProgramRunning, ProgramStopping) {
 		self.processLock.Lock()
-		process := self.cmd
+		var process = self.cmd
 		self.processLock.Unlock()
 
 		if process != nil {
-			status := process.Status()
+			var status = process.Status()
 			log.Debugf("[%s] Stopping PID %d with", self.Name, status.PID)
 
 			if err := process.Stop(); err == nil {

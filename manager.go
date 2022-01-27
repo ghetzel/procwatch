@@ -201,9 +201,7 @@ func (self *Manager) Run() {
 		checkLock.Wait()
 
 		// if we're stopping the manager, and if all the programs are in a terminal state, quit the loop
-		isStopping := self.stopping
-
-		if isStopping {
+		if self.stopping {
 			self.externalWaiters <- true
 			break
 		}
@@ -255,7 +253,7 @@ func (self *Manager) AddEventHandler(handler EventHandler) {
 //                                   \- no?              -> [FATAL]
 //
 func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
-	isStopping := self.stopping
+	var isStopping = self.stopping
 	defer checkLock.Done()
 
 	if isStopping {
@@ -267,6 +265,7 @@ func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGro
 		// first-time start for autostart programs
 		if program.AutoStart && !program.HasEverBeenStarted() {
 			log.Debugf("[%s] Starting program for the first time", program.Name)
+			program.LastTriggeredAt = time.Now()
 			program.Start()
 		}
 

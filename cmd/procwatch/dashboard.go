@@ -1,31 +1,38 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	tabwriter "github.com/NonerKao/color-aware-tabwriter"
 	"github.com/fatih/color"
+	"github.com/ghetzel/go-stockutil/typeutil"
 	"github.com/ghetzel/procwatch"
 	"github.com/jroimartin/gocui"
 	logging "github.com/op/go-logging"
 )
 
 type Dashboard struct {
-	gui       *gocui.Gui
-	manager   *procwatch.Manager
-	paused    bool
-	logHeight int
-	lines     []string
-	lineno    int
-	level     logging.Level
+	gui             *gocui.Gui
+	manager         *procwatch.Manager
+	paused          bool
+	logHeight       int
+	lines           []string
+	lineno          int
+	level           logging.Level
+	widestStatusYet int
+	lineBuffer      *bytes.Buffer
 }
 
 func NewDashboard(manager *procwatch.Manager) *Dashboard {
 	return &Dashboard{
-		manager: manager,
-		lines:   make([]string, 0),
+		manager:    manager,
+		lines:      make([]string, 0),
+		lineBuffer: bytes.NewBuffer(nil),
 	}
 }
 
@@ -47,6 +54,8 @@ func (self *Dashboard) Run() error {
 	if err := self.setupKeybindings(); err != nil {
 		return err
 	}
+
+	go self.scanAndEmitLogBuffer()
 
 	if err := self.gui.MainLoop(); err != nil && err != gocui.ErrQuit {
 		return err
@@ -105,7 +114,7 @@ func (self *Dashboard) render(g *gocui.Gui) error {
 		v.Frame = true
 		v.Title = `Process Status`
 
-		table := tabwriter.NewWriter(v, 5, 2, 1, ' ', tabwriter.Debug)
+		var table = tabwriter.NewWriter(v, 5, 2, 2, ' ', tabwriter.Debug)
 		self.renderStatus(table)
 
 		v.Clear()
@@ -136,10 +145,10 @@ func (self *Dashboard) render(g *gocui.Gui) error {
 }
 
 func (self *Dashboard) renderStatus(w io.Writer) {
-	fmt.Fprintf(w, "PROGRAM\tSTATE   \tSTATUS\n")
+	fmt.Fprintf(w, "PROGRAM\tSTATE   \tSTATUS\tNEXT_SCHEDULED\n")
 
 	for _, program := range self.manager.Programs() {
-		state := program.State
+		var state = program.State
 		var c *color.Color
 
 		switch state {
@@ -153,9 +162,24 @@ func (self *Dashboard) renderStatus(w io.Writer) {
 			c = color.New(color.FgRed, color.Bold)
 		}
 
-		stateStr := c.Sprintf("%- 8s", state)
+		var stateStr = c.Sprintf("%- 8s", state)
+		var nextStr string
 
-		fmt.Fprintf(w, "%s\t%v\t%v\n", program.Name, stateStr, program)
+		if next := program.NextScheduledAt; !next.IsZero() {
+			nextStr = next.Format(time.RFC3339)
+		}
+
+		var output = program.String()
+
+		if l := len(output); l > self.widestStatusYet {
+			self.widestStatusYet = l
+		}
+
+		var fmtw = typeutil.String(self.widestStatusYet)
+
+		output = fmt.Sprintf("%- "+fmtw+"s", output)
+
+		fmt.Fprintf(w, "%s\t%v\t%v\t%s\n", program.Name, stateStr, output, nextStr)
 	}
 }
 
@@ -163,6 +187,24 @@ func (self *Dashboard) renderLog(w io.Writer) {
 	for _, line := range self.lines {
 		fmt.Fprintln(w, line)
 	}
+}
+
+func (self *Dashboard) scanAndEmitLogBuffer() {
+	var scanner = bufio.NewScanner(self.lineBuffer)
+
+	for {
+		for scanner.Scan() {
+			if line := strings.TrimSpace(scanner.Text()); line != `` {
+				self.lines = append(self.lines, line)
+			}
+		}
+
+		time.Sleep(time.Second)
+	}
+}
+
+func (self *Dashboard) Write(p []byte) (int, error) {
+	return self.lineBuffer.Write(p)
 }
 
 func (self *Dashboard) GetLevel(module string) logging.Level {

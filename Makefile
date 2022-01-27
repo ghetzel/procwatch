@@ -8,14 +8,15 @@ LOCALS          := $(shell find . -type f -name '*.go' 2> /dev/null)
 all: deps fmt build
 
 deps:
-	go generate -x
-	go mod tidy
+	go get ./...
 
 clean:
 	-rm -rf bin
 	-rm *.rpm *.tar.gz *.deb
 
 fmt:
+	go mod tidy
+	go generate ./...
 	gofmt -w $(LOCALS)
 
 test:

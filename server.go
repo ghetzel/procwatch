@@ -1,10 +1,10 @@
 package procwatch
 
-//go:generate esc -o static.go -pkg procwatch -modtime 1500000000 -prefix ui ui
-
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"strings"
@@ -15,6 +15,11 @@ import (
 	"github.com/husobee/vestigo"
 	"github.com/urfave/negroni"
 )
+
+//go:embed ui
+//go:embed ui/_layouts
+//go:embed ui/*/_*
+var embedded embed.FS
 
 var DefaultAddress = `:9001`
 
@@ -39,26 +44,32 @@ func (self *Server) Initialize(manager *Manager) error {
 }
 
 func (self *Server) Start() error {
+	var uiDir = self.UiDirectory
+	var serverHandler = negroni.New()
+	var router = vestigo.NewRouter()
+
 	if self.UiDirectory == `` {
 		self.UiDirectory = `embedded`
 	}
-
 	if d := os.Getenv(`UI`); d != `` {
 		self.UiDirectory = d
 	}
-
-	uiDir := self.UiDirectory
-
 	if self.UiDirectory == `embedded` {
 		uiDir = `/`
 	}
 
-	serverHandler := negroni.New()
-	router := vestigo.NewRouter()
-	ui := diecast.NewServer(uiDir, `*.html`)
+	var ui = diecast.NewServer(uiDir, `*.html`)
+
+	if !log.Debugging() {
+		ui.Log.Destination = os.DevNull
+	}
 
 	if self.UiDirectory == `embedded` {
-		ui.SetFileSystem(FS(false))
+		if sub, err := fs.Sub(embedded, `ui`); err == nil {
+			ui.SetFileSystem(http.FS(sub))
+		} else {
+			return fmt.Errorf("fs: %v", err)
+		}
 	}
 
 	if err := ui.Initialize(); err != nil {
@@ -86,7 +97,7 @@ func (self *Server) Start() error {
 	})
 
 	router.Get(`/api/programs/:program`, func(w http.ResponseWriter, req *http.Request) {
-		name := vestigo.Param(req, `program`)
+		var name = vestigo.Param(req, `program`)
 
 		if program, ok := self.manager.Program(name); ok {
 			Respond(w, program)
@@ -96,8 +107,8 @@ func (self *Server) Start() error {
 	})
 
 	router.Put(`/api/programs/:program/action/:action`, func(w http.ResponseWriter, req *http.Request) {
-		name := vestigo.Param(req, `program`)
-		action := strings.ToLower(vestigo.Param(req, `action`))
+		var name = vestigo.Param(req, `program`)
+		var action = strings.ToLower(vestigo.Param(req, `action`))
 
 		if program, ok := self.manager.Program(name); ok {
 			switch action {
@@ -125,7 +136,7 @@ func (self *Server) Start() error {
 
 	log.Infof("Running API server at %s", self.Address)
 
-	server := &http.Server{
+	var server = &http.Server{
 		Addr:           self.Address,
 		Handler:        serverHandler,
 		ReadTimeout:    10 * time.Second,
