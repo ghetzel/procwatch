@@ -411,6 +411,11 @@ func (self *Program) StopFatal() {
 	self.transitionTo(ProgramFatal)
 }
 
+func (self *Program) Restart() {
+	self.Stop()
+	self.Start()
+}
+
 func (self *Program) PID() int {
 	if !self.InState(ProgramStarting, ProgramRunning, ProgramStopping) {
 		return -1

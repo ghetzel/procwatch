@@ -119,8 +119,7 @@ func (self *Server) Start() error {
 				program.Stop()
 
 			case `restart`:
-				program.Stop()
-				program.Start()
+				program.Restart()
 
 			default:
 				http.Error(w, fmt.Sprintf("Unknown action '%s'", action), http.StatusBadRequest)

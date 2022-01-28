@@ -5,30 +5,43 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/ghetzel/go-stockutil/typeutil"
 	"github.com/ghetzel/procwatch"
 	"github.com/rivo/tview"
 )
 
 type ServicesDashboardPage struct {
-	dash     *Dashboard
-	id       string
-	table    *tview.Table
-	selected int
+	dash  *Dashboard
+	id    string
+	table *tview.Table
 }
 
 func NewServicesDashboardPage(id string, dash *Dashboard) *ServicesDashboardPage {
 	return &ServicesDashboardPage{
-		id:       id,
-		dash:     dash,
-		selected: 0,
+		id:   id,
+		dash: dash,
+	}
+}
+
+func (self *ServicesDashboardPage) getSelectedProgram() (*procwatch.Program, bool) {
+	var row, _ = self.table.GetSelection()
+
+	if namecell := self.table.GetCell(row, 0); namecell != nil {
+		return self.dash.manager.Program(namecell.Text)
+	} else {
+		return nil, false
 	}
 }
 
 func (self *ServicesDashboardPage) HandleKeyEvent(event *tcell.EventKey) *tcell.EventKey {
-	// switch event.Rune() {
+	switch event.Rune() {
 	// case 'l':
-	// 	// log view
-	// }
+	// log view
+	case 'R':
+		if program, ok := self.getSelectedProgram(); ok {
+			go program.Restart()
+		}
+	}
 
 	return event
 }
@@ -42,41 +55,74 @@ func (self *ServicesDashboardPage) Update() error {
 	// self.table.SetBorder(true)
 	// self.table.SetBorderColor(tcell.ColorRed)
 	self.table.SetSelectable(true, false)
+	self.table.SetWrapSelection(true, false)
+	self.table.SetFixed(1, 0)
 	self.table.Clear()
 
-	var maxNameLen int
+	var rpad int = 2
+	var maxNameLen int = 12
+	var maxScheduleLen int = 9
 
 	for _, program := range self.dash.manager.Programs() {
 		if l := len(program.Name); l > maxNameLen {
 			maxNameLen = l
 		}
+		if l := len(program.Schedule); l > maxScheduleLen {
+			maxScheduleLen = l
+		}
+	}
+
+	var fmtName = "%- " + typeutil.String(maxNameLen+rpad) + "s"
+	var fmtSchd = "%- " + typeutil.String(maxScheduleLen+rpad) + "s"
+
+	for i, label := range []string{
+		`PROGRAM NAME`,
+		`STATE`,
+		`SCHEDULE`,
+		`NEXT RUN`,
+		`LAST OUTPUT`,
+	} {
+		var cell = tview.NewTableCell(label)
+		cell.SetSelectable(false)
+		cell.SetTextColor(tcell.ColorBlue)
+		self.table.SetCell(0, i, cell)
 	}
 
 	for row, program := range self.dash.manager.Programs() {
-		var cells = make([]*tview.TableCell, 4)
+		var cells = make([]*tview.TableCell, 5)
 		//
 		// ---------------------------------------------------------------------
-		cells[0] = tview.NewTableCell(program.Name)
-		cells[0].SetMaxWidth(maxNameLen + 2)
+		cells[0] = tview.NewTableCell(fmt.Sprintf(fmtName, program.Name))
+		cells[0].SetMaxWidth(maxNameLen + rpad)
 		//
 		// ---------------------------------------------------------------------
 		cells[1] = tview.NewTableCell(self.taggedProgramState(program.State))
+		cells[1].SetMaxWidth(10)
 		//
 		// ---------------------------------------------------------------------
+		cells[2] = tview.NewTableCell(fmt.Sprintf(fmtSchd, program.Schedule))
+		cells[2].SetMaxWidth(maxScheduleLen + rpad)
 		var nextstr string
 		if next := program.NextScheduledAt; !next.IsZero() {
-			nextstr = next.Format(time.RFC3339)
+			var until = next.Sub(time.Now()).Round(time.Second)
+
+			if until < 0 {
+				until = 0
+			}
+
+			nextstr = until.String()
 		} else {
 			nextstr = `-`
 		}
-		cells[2] = tview.NewTableCell(fmt.Sprintf("%- 28s", nextstr))
+		cells[3] = tview.NewTableCell(fmt.Sprintf("%- 10s", nextstr))
+		cells[3].SetMaxWidth(10)
 		//
 		// ---------------------------------------------------------------------
-		cells[3] = tview.NewTableCell(program.String())
-		cells[3].SetExpansion(1)
+		cells[4] = tview.NewTableCell(program.String())
+		cells[4].SetExpansion(1)
 
 		for col, cell := range cells {
-			self.table.SetCell(row, col, cell)
+			self.table.SetCell(row+1, col, cell)
 		}
 	}
 
