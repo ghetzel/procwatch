@@ -16,6 +16,7 @@ require (
 	github.com/husobee/vestigo v1.1.0
 	github.com/mattn/go-shellwords v1.0.9
 	github.com/natefinch/lumberjack v2.0.0+incompatible
+	github.com/nxadm/tail v1.4.8
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
 	github.com/pkg/term v0.0.0-20180730021639-bffc007b7fd5 // indirect
 	github.com/rivo/tview v0.0.0-20220106183741-90d72bc664f5
@@ -43,6 +44,7 @@ require (
 	github.com/dsnet/compress v0.0.0-20171208185109-cc9eb1d7ad76 // indirect
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5 // indirect
 	github.com/fatih/structs v1.0.0 // indirect
+	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/ghetzel/argonaut v0.0.0-20180428155514-51604c68ce30 // indirect
 	github.com/ghetzel/friendscript v0.6.6 // indirect
@@ -124,6 +126,7 @@ require (
 	google.golang.org/appengine v1.6.5 // indirect
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/neurosnap/sentences.v1 v1.0.6 // indirect
+	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/apimachinery v0.21.0 // indirect

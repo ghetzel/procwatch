@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,9 +16,21 @@ import (
 	"github.com/rivo/tview"
 )
 
+var spinner = []rune{'○', '◔', '◑', '◕', '●'}
+
+// var spinner = []rune{'◐', '◑'}
+
+type toggle struct {
+	Label    string
+	Shortcut rune
+	On       bool
+}
+
 type dashboardPage interface {
 	String() string
 	Update() error
+	GetToggleStates() []toggle
+	Color() tcell.Color
 	RootElement() tview.Primitive
 	HandleKeyEvent(event *tcell.EventKey) *tcell.EventKey
 }
@@ -32,16 +45,19 @@ type Dashboard struct {
 	level           logging.Level
 	widestStatusYet int
 	lineBuffer      *bytes.Buffer
-	pages           *tview.Pages
-	boards          map[string]dashboardPage
 	guictx          context.Context
 	targetFPS       int
 	curpage         string
-	header          *tview.Frame
-	rootLayout      *tview.Flex
+	curpageindex    int
 	lastpage        string
 	framelock       sync.Mutex
 	frame           int64
+	hideHeader      bool
+	pagelist        []dashboardPage
+	rootLayout      *tview.Flex
+	header          *tview.Frame
+	pages           *tview.Pages
+	navbar          *tview.Table
 }
 
 func NewDashboard(manager *procwatch.Manager) *Dashboard {
@@ -49,7 +65,6 @@ func NewDashboard(manager *procwatch.Manager) *Dashboard {
 		manager:    manager,
 		lines:      make([]string, 0),
 		lineBuffer: bytes.NewBuffer(nil),
-		boards:     make(map[string]dashboardPage),
 		guictx:     context.Background(),
 		targetFPS:  8,
 	}
@@ -58,7 +73,7 @@ func NewDashboard(manager *procwatch.Manager) *Dashboard {
 func (self *Dashboard) Run() error {
 	self.gui = tview.NewApplication()
 	go self.startDrawUpdates()
-	self.guiSetup()
+	self.init()
 
 	if err := self.setupKeybindings(); err != nil {
 		return err
@@ -67,33 +82,63 @@ func (self *Dashboard) Run() error {
 	return self.gui.Run()
 }
 
-func (self *Dashboard) currentPage() (board dashboardPage, changed bool) {
-	if self.curpage != self.lastpage {
-		changed = true
-		self.lastpage = self.curpage
+func (self *Dashboard) Stop() {
+	if manager := self.manager; manager != nil {
+		manager.Stop(false)
 	}
 
-	board = self.boards[self.curpage]
-	return
+	if gui := self.gui; gui != nil {
+		gui.Stop()
+	}
 }
 
-func (self *Dashboard) guiSetup() {
+func (self *Dashboard) init() {
+	self.navbar = tview.NewTable()
+	self.navbar.SetBorderPadding(0, 0, 1, 1)
+
 	self.pages = tview.NewPages()
-	self.pages.SetBorderColor(tcell.ColorBlue)
+	self.curpageindex = -1
+
 	self.pages.SetBorderPadding(0, 0, 1, 1)
-	self.curpage = `services`
 
-	self.boards[`services`] = NewServicesDashboardPage(`services`, self)
+	for i, page := range []dashboardPage{
+		NewServicesDashboardPage(self),
+		NewLogsDashboardPage(self),
+	} {
+		var id = page.String()
 
-	for id, page := range self.boards {
 		self.pages.AddPage(id, page.RootElement(), true, false)
+		self.pagelist = append(self.pagelist, page)
+
+		var navitem = tview.NewTableCell(strings.ToUpper(id))
+		navitem.SetExpansion(1)
+		navitem.SetReference(page)
+		navitem.SetAlign(tview.AlignCenter)
+		self.navbar.SetCell(0, i, navitem)
+
+		if self.curpage == `` {
+			self.curpage = id
+			self.navpage(true)
+		}
+	}
+
+	var maxPageNameLen int
+
+	for _, page := range self.pagelist {
+		if l := len(page.String()); l > maxPageNameLen {
+			maxPageNameLen = l
+		}
+	}
+
+	for i := 0; i < self.navbar.GetColumnCount(); i++ {
+		self.navbar.GetCell(0, i).SetMaxWidth(maxPageNameLen + 2)
 	}
 
 	self.pages.SetBorder(true)
-
 	self.rootLayout = tview.NewFlex()
 	self.rootLayout.SetDirection(tview.FlexRow)
 	self.rootLayout.AddItem(self.pages, 0, 1, true)
+	self.rootLayout.AddItem(self.navbar, 1, 0, false)
 
 	self.header = tview.NewFrame(self.rootLayout)
 	self.gui.SetRoot(self.header, true)
@@ -106,16 +151,12 @@ func (self *Dashboard) redraw() {
 	self.updateHeaderDetails()
 
 	self.gui.QueueUpdateDraw(func() {
-		var board, changed = self.currentPage()
-
-		if err := board.Update(); err != nil {
+		var page, changed = self.currentPage()
+		if err := page.Update(); err != nil {
 			log.Errorf("update failed: %v", err)
-		} else {
-			// defer self.gui.Sync()
 		}
-
 		if changed {
-			self.pages.SwitchToPage(board.String())
+			self.pages.SwitchToPage(page.String())
 		}
 	})
 }
@@ -132,21 +173,36 @@ func (self *Dashboard) updateHeaderDetails() {
 		return
 	}
 
+	var page, _ = self.currentPage()
+
 	self.header.Clear()
-	self.header.AddText("LEFT 1", true, tview.AlignLeft, tcell.ColorOrange)
-	self.header.AddText("LEFT 2", true, tview.AlignLeft, tcell.ColorOrange)
-	self.header.AddText("LEFT 3", true, tview.AlignLeft, tcell.ColorOrange)
-	self.header.AddText("LEFT 4", true, tview.AlignLeft, tcell.ColorOrange)
+	self.header.SetBorderPadding(0, 0, 1, 1)
+	self.header.AddText(fmt.Sprintf("[#aaaaaa]proc[green::b]watch[-] [#444444]v%s[-]", procwatch.Version), true, tview.AlignLeft, tcell.ColorReset)
 
-	self.header.AddText("CENTER 1", true, tview.AlignCenter, tcell.ColorOrange)
-	self.header.AddText("CENTER 2", true, tview.AlignCenter, tcell.ColorOrange)
-	self.header.AddText("CENTER 3", true, tview.AlignCenter, tcell.ColorOrange)
-	self.header.AddText("CENTER 4", true, tview.AlignCenter, tcell.ColorOrange)
+	if states := page.GetToggleStates(); len(states) > 0 {
+		self.header.AddText("ACTIONS", true, tview.AlignLeft, tcell.ColorReset)
 
-	self.header.AddText(fmt.Sprintf("[blue::d]\u25a0\u25a0\u25a0\u25a0\u25a0[blue::b]\u25a0\u25a0\u25a0\u25a0\u25a0[-]  [white]CPU x%- 5d", 8), true, tview.AlignRight, tcell.ColorOrange)
-	self.header.AddText(fmt.Sprintf("[grey::d]\u25a0\u25a0\u25a0\u25a0\u25a0[red::b]\u25a0[green::b]\u25a0\u25a0\u25a0\u25a0[-]  [white]MEM @ 128G"), true, tview.AlignRight, tcell.ColorOrange)
-	self.header.AddText("24.32 15.32 7.09 [white]LOAD 1-5-15", true, tview.AlignRight, tcell.ColorOrange)
-	self.header.AddText(fmt.Sprintf("frame=%d", self.frame), true, tview.AlignRight, tcell.ColorOrange)
+		for _, state := range states {
+			var scol = `red`
+			var sval = `OFF`
+
+			if state.On {
+				scol = `green`
+				sval = `ON`
+			}
+
+			var txt = fmt.Sprintf("[#999999]([-][#dddddd]%c[-][#999999])[-] %- 12s [%s]%s[-]", state.Shortcut, state.Label, scol, sval)
+			self.header.AddText(txt, true, tview.AlignLeft, tcell.ColorReset)
+		}
+	}
+
+	var info = []string{
+		"[white]LOAD[-] [#bbbbbb]24.32 [#999999]15.32 [#777777]7.09[-:-:-]",
+		fmt.Sprintf("[white]CPU[#999999]x%d[-] [blue::b]\u25a0\u25a0\u25a0\u25a0\u25a0[blue::d]\u25a0\u25a0\u25a0\u25a0\u25a0[-:-:-]", 8),
+		fmt.Sprintf("[white]MEM[#999999] 128G[-] [green::b]\u25a0\u25a0\u25a0\u25a0\u25a0[red::b]\u25a0[#999999::d]\u25a0\u25a0\u25a0\u25a0[-:-:-]"),
+	}
+
+	self.header.AddText(strings.Join(info, `  `), true, tview.AlignRight, tcell.ColorReset)
 }
 
 func (self *Dashboard) confirmExit() {
@@ -166,11 +222,9 @@ func (self *Dashboard) confirmExit() {
 
 	modal.SetDoneFunc(func(index int, label string) {
 		self.gui.SetRoot(self.rootLayout, true)
-
 		if index > 0 {
 			self.Stop()
 		}
-
 	})
 
 	self.gui.SetRoot(modal, true)
@@ -178,9 +232,21 @@ func (self *Dashboard) confirmExit() {
 
 func (self *Dashboard) setupKeybindings() error {
 	self.gui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		defer self.updateHeaderDetails()
+
+		switch event.Key() {
+		case tcell.KeyTAB:
+			self.navpage(true)
+			return nil
+		}
+
 		switch event.Rune() {
 		case 'q', 'Q':
-			self.confirmExit()
+			// self.confirmExit()
+			self.Stop()
+			return nil
+		case 'h':
+			self.hideHeader = !self.hideHeader
 			return nil
 		}
 
@@ -191,14 +257,52 @@ func (self *Dashboard) setupKeybindings() error {
 	return nil
 }
 
-func (self *Dashboard) Stop() {
-	if manager := self.manager; manager != nil {
-		manager.Stop(false)
+func (self *Dashboard) currentPage() (page dashboardPage, changed bool) {
+	if i := self.curpageindex; i < len(self.pagelist) {
+		page = self.pagelist[i]
+		self.curpage = page.String()
+
+		if self.curpage != self.lastpage {
+			changed = true
+			self.lastpage = self.curpage
+		}
 	}
 
-	if gui := self.gui; gui != nil {
-		gui.Stop()
+	return
+}
+
+func (self *Dashboard) navpage(forward bool) error {
+	var ni int
+
+	if forward {
+		ni = (self.curpageindex + 1)
+	} else {
+		ni = (self.curpageindex - 1)
 	}
+
+	ni = ni % len(self.pagelist)
+
+	if ni < len(self.pagelist) {
+		var page = self.pagelist[ni]
+
+		self.pages.SwitchToPage(page.String())
+		self.pages.SetBorderColor(page.Color())
+		self.curpageindex = ni
+
+		for i := 0; i < self.navbar.GetColumnCount(); i++ {
+			var cell = self.navbar.GetCell(0, i)
+
+			if i == ni {
+				cell.SetTextColor(tcell.ColorBlack)
+				cell.SetBackgroundColor(page.Color())
+			} else {
+				cell.SetTextColor(tcell.ColorReset)
+				cell.SetBackgroundColor(tcell.ColorReset)
+			}
+		}
+	}
+
+	return nil
 }
 
 // func (self *Dashboard) renderLog(w io.Writer) {

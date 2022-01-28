@@ -242,7 +242,7 @@ func (self *Program) Log(line string, stdout bool) {
 	case `stdout`:
 		fmt.Fprint(os.Stdout, strings.TrimSuffix(line, "\n")+"\n")
 	case `stderr`:
-		fmt.Fprint(os.Stdout, strings.TrimSuffix(line, "\n")+"\n")
+		fmt.Fprint(os.Stderr, strings.TrimSuffix(line, "\n")+"\n")
 	default:
 		if self.rollingLogger == nil {
 			var maxsize int

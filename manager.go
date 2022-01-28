@@ -1,6 +1,7 @@
 package procwatch
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os/user"
@@ -18,11 +19,28 @@ import (
 	"github.com/ghetzel/go-stockutil/structutil"
 	"github.com/go-ini/ini"
 	"github.com/natefinch/lumberjack"
+	"github.com/nxadm/tail"
 )
 
 var DefaultLogFileMaxBytes = 50 * convutil.Megabyte
 
 type EventHandler func(*Event)
+
+type LogLine struct {
+	Timestamp  time.Time
+	Text       string
+	Filename   string
+	LineNumber int
+	Program    *Program
+}
+
+func (self LogLine) String() string {
+	return self.Text
+}
+
+func (self LogLine) IsEmpty() bool {
+	return len(self.Text) == 0
+}
 
 type Manager struct {
 	ConfigFile            string
@@ -408,4 +426,39 @@ func (self *Manager) Log(level log.Level, line string, stack log.StackItems) {
 		level,
 		line,
 	)
+}
+
+func (self *Manager) Tail(ctx context.Context) <-chan LogLine {
+	var tailchan = make(chan LogLine)
+
+	go func() {
+		defer close(tailchan)
+
+		for {
+			if tailer, err := tail.TailFile(self.rollingLogger.Filename, tail.Config{
+				Poll:   true,
+				Follow: true,
+				ReOpen: true,
+			}); err == nil {
+				for line := range tailer.Lines {
+					select {
+					case <-ctx.Done():
+						return
+					case tailchan <- LogLine{
+						Timestamp:  line.Time,
+						Filename:   tailer.Filename,
+						Text:       line.Text,
+						LineNumber: line.Num,
+						Program:    nil,
+					}:
+						continue
+					}
+				}
+			} else {
+				return
+			}
+		}
+	}()
+
+	return tailchan
 }
