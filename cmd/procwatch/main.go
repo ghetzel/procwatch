@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"os/user"
@@ -129,7 +130,7 @@ func main() {
 
 			if c.Bool(`dashboard`) {
 				var dashboard = NewDashboard(manager)
-				log.SetOutput(dashboard)
+				log.SetOutput(io.Discard)
 				log.FatalIf(dashboard.Run())
 			}
 

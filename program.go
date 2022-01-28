@@ -157,7 +157,7 @@ func NewProgram(name string, manager *Manager) *Program {
 		NumProcs:              1,
 		Priority:              999,
 		AutoStart:             true,
-		StartSeconds:          1,
+		StartSeconds:          0,
 		StartRetries:          3,
 		ExitCodes:             []int{0, 2},
 		StopSignal:            `TERM`,

@@ -1,23 +1,29 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
+	"context"
 	"fmt"
-	"io"
-	"strings"
+	"sync"
 	"time"
 
-	tabwriter "github.com/NonerKao/color-aware-tabwriter"
 	"github.com/fatih/color"
-	"github.com/ghetzel/go-stockutil/typeutil"
+	"github.com/gdamore/tcell/v2"
+	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/procwatch"
-	"github.com/jroimartin/gocui"
 	logging "github.com/op/go-logging"
+	"github.com/rivo/tview"
 )
 
+type dashboardPage interface {
+	String() string
+	Update() error
+	RootElement() tview.Primitive
+	HandleKeyEvent(event *tcell.EventKey) *tcell.EventKey
+}
+
 type Dashboard struct {
-	gui             *gocui.Gui
+	gui             *tview.Application
 	manager         *procwatch.Manager
 	paused          bool
 	logHeight       int
@@ -26,6 +32,16 @@ type Dashboard struct {
 	level           logging.Level
 	widestStatusYet int
 	lineBuffer      *bytes.Buffer
+	pages           *tview.Pages
+	boards          map[string]dashboardPage
+	guictx          context.Context
+	targetFPS       int
+	curpage         string
+	header          *tview.Frame
+	rootLayout      *tview.Flex
+	lastpage        string
+	framelock       sync.Mutex
+	frame           int64
 }
 
 func NewDashboard(manager *procwatch.Manager) *Dashboard {
@@ -33,179 +49,181 @@ func NewDashboard(manager *procwatch.Manager) *Dashboard {
 		manager:    manager,
 		lines:      make([]string, 0),
 		lineBuffer: bytes.NewBuffer(nil),
+		boards:     make(map[string]dashboardPage),
+		guictx:     context.Background(),
+		targetFPS:  8,
 	}
 }
 
 func (self *Dashboard) Run() error {
-	if g, err := gocui.NewGui(gocui.OutputNormal); err == nil {
-		self.gui = g
-		defer self.gui.Close()
-		go self.startDrawUpdates()
-
-		self.manager.AddEventHandler(func(_ *procwatch.Event) {
-			self.gui.Update(self.render)
-		})
-	} else {
-		return err
-	}
-
-	self.gui.SetManagerFunc(self.layout)
+	self.gui = tview.NewApplication()
+	go self.startDrawUpdates()
+	self.guiSetup()
 
 	if err := self.setupKeybindings(); err != nil {
 		return err
 	}
 
-	go self.scanAndEmitLogBuffer()
-
-	if err := self.gui.MainLoop(); err != nil && err != gocui.ErrQuit {
-		return err
-	}
-
-	return nil
+	return self.gui.Run()
 }
 
-func (self *Dashboard) setupKeybindings() error {
-	if err := self.gui.SetKeybinding(``, 'q', gocui.ModNone, self.quit); err != nil {
-		return err
+func (self *Dashboard) currentPage() (board dashboardPage, changed bool) {
+	if self.curpage != self.lastpage {
+		changed = true
+		self.lastpage = self.curpage
 	}
 
-	return nil
+	board = self.boards[self.curpage]
+	return
 }
 
-func (self *Dashboard) layout(g *gocui.Gui) error {
-	maxX, maxY := g.Size()
-	self.logHeight = int(maxY/2.0) - 1
+func (self *Dashboard) guiSetup() {
+	self.pages = tview.NewPages()
+	self.pages.SetBorderColor(tcell.ColorBlue)
+	self.pages.SetBorderPadding(0, 0, 1, 1)
+	self.curpage = `services`
 
-	if _, err := g.SetView(`status`, 0, 0, maxX-1, maxY-self.logHeight-2); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
+	self.boards[`services`] = NewServicesDashboardPage(`services`, self)
+
+	for id, page := range self.boards {
+		self.pages.AddPage(id, page.RootElement(), true, false)
+	}
+
+	self.pages.SetBorder(true)
+
+	self.rootLayout = tview.NewFlex()
+	self.rootLayout.SetDirection(tview.FlexRow)
+	self.rootLayout.AddItem(self.pages, 0, 1, true)
+
+	self.header = tview.NewFrame(self.rootLayout)
+	self.gui.SetRoot(self.header, true)
+}
+
+func (self *Dashboard) redraw() {
+	self.framelock.Lock()
+	self.frame += 1
+	defer self.framelock.Unlock()
+	self.updateHeaderDetails()
+
+	self.gui.QueueUpdateDraw(func() {
+		var board, changed = self.currentPage()
+
+		if err := board.Update(); err != nil {
+			log.Errorf("update failed: %v", err)
+		} else {
+			// defer self.gui.Sync()
 		}
-	}
 
-	if _, err := g.SetView(`log`, 0, self.logHeight+1, maxX-1, maxY-1); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
+		if changed {
+			self.pages.SwitchToPage(board.String())
 		}
-	}
-
-	return nil
-}
-
-func (self *Dashboard) quit(_ *gocui.Gui, _ *gocui.View) error {
-	self.manager.Stop(false)
-	return gocui.ErrQuit
+	})
 }
 
 func (self *Dashboard) startDrawUpdates() {
 	for {
-		self.gui.Update(self.render)
-		time.Sleep(time.Second)
+		self.redraw()
+		time.Sleep((1000 * time.Millisecond) / time.Duration(self.targetFPS))
 	}
 }
 
-func (self *Dashboard) render(g *gocui.Gui) error {
-	if self.paused {
-		return nil
+func (self *Dashboard) updateHeaderDetails() {
+	if self.header == nil {
+		return
 	}
 
-	// nop := color.New(color.Reset)
+	self.header.Clear()
+	self.header.AddText("LEFT 1", true, tview.AlignLeft, tcell.ColorOrange)
+	self.header.AddText("LEFT 2", true, tview.AlignLeft, tcell.ColorOrange)
+	self.header.AddText("LEFT 3", true, tview.AlignLeft, tcell.ColorOrange)
+	self.header.AddText("LEFT 4", true, tview.AlignLeft, tcell.ColorOrange)
 
-	if v, err := g.View(`status`); err == nil {
-		v.Frame = true
-		v.Title = `Process Status`
+	self.header.AddText("CENTER 1", true, tview.AlignCenter, tcell.ColorOrange)
+	self.header.AddText("CENTER 2", true, tview.AlignCenter, tcell.ColorOrange)
+	self.header.AddText("CENTER 3", true, tview.AlignCenter, tcell.ColorOrange)
+	self.header.AddText("CENTER 4", true, tview.AlignCenter, tcell.ColorOrange)
 
-		var table = tabwriter.NewWriter(v, 5, 2, 2, ' ', tabwriter.Debug)
-		self.renderStatus(table)
+	self.header.AddText(fmt.Sprintf("[blue::d]\u25a0\u25a0\u25a0\u25a0\u25a0[blue::b]\u25a0\u25a0\u25a0\u25a0\u25a0[-]  [white]CPU x%- 5d", 8), true, tview.AlignRight, tcell.ColorOrange)
+	self.header.AddText(fmt.Sprintf("[grey::d]\u25a0\u25a0\u25a0\u25a0\u25a0[red::b]\u25a0[green::b]\u25a0\u25a0\u25a0\u25a0[-]  [white]MEM @ 128G"), true, tview.AlignRight, tcell.ColorOrange)
+	self.header.AddText("24.32 15.32 7.09 [white]LOAD 1-5-15", true, tview.AlignRight, tcell.ColorOrange)
+	self.header.AddText(fmt.Sprintf("frame=%d", self.frame), true, tview.AlignRight, tcell.ColorOrange)
+}
 
-		v.Clear()
-		table.Flush()
-	} else {
-		return err
-	}
+func (self *Dashboard) confirmExit() {
+	var modal = tview.NewModal()
 
-	if v, err := g.View(`log`); err == nil {
-		v.Frame = true
-		v.Title = `Log Output`
+	modal.SetTitle("Confirm exit...")
+	modal.SetText("Are you sure you want to stop all services and exit the program?")
+	modal.SetBackgroundColor(tcell.ColorRed)
+	modal.SetTextColor(tcell.ColorYellow)
+	modal.SetButtonBackgroundColor(tcell.ColorRed)
+	modal.SetButtonTextColor(tcell.ColorYellow)
 
-		// table := tabwriter.NewWriter(v, 5, 2, 1, ' ', tabwriter.Debug)
-		v.Clear()
+	modal.AddButtons([]string{
+		`Cancel`,
+		`Stop & Exit`,
+	})
 
-		self.renderLog(v)
+	modal.SetDoneFunc(func(index int, label string) {
+		self.gui.SetRoot(self.rootLayout, true)
 
-		// table.Flush()
-	} else {
-		return err
-	}
+		if index > 0 {
+			self.Stop()
+		}
 
-	if _, err := g.SetCurrentView(`log`); err != nil {
-		return err
-	}
+	})
+
+	self.gui.SetRoot(modal, true)
+}
+
+func (self *Dashboard) setupKeybindings() error {
+	self.gui.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Rune() {
+		case 'q', 'Q':
+			self.confirmExit()
+			return nil
+		}
+
+		var board, _ = self.currentPage()
+		return board.HandleKeyEvent(event)
+	})
 
 	return nil
 }
 
-func (self *Dashboard) renderStatus(w io.Writer) {
-	fmt.Fprintf(w, "PROGRAM\tSTATE   \tSTATUS\tNEXT_SCHEDULED\n")
+func (self *Dashboard) Stop() {
+	if manager := self.manager; manager != nil {
+		manager.Stop(false)
+	}
 
-	for _, program := range self.manager.Programs() {
-		var state = program.State
-		var c *color.Color
-
-		switch state {
-		case procwatch.ProgramRunning:
-			c = color.New(color.FgGreen, color.Bold)
-		case procwatch.ProgramStarting:
-			c = color.New(color.FgBlue, color.Bold)
-		case procwatch.ProgramStopped, procwatch.ProgramExited:
-			c = color.New(color.FgWhite, color.Bold)
-		default:
-			c = color.New(color.FgRed, color.Bold)
-		}
-
-		var stateStr = c.Sprintf("%- 8s", state)
-		var nextStr string
-
-		if next := program.NextScheduledAt; !next.IsZero() {
-			nextStr = next.Format(time.RFC3339)
-		}
-
-		var output = program.String()
-
-		if l := len(output); l > self.widestStatusYet {
-			self.widestStatusYet = l
-		}
-
-		var fmtw = typeutil.String(self.widestStatusYet)
-
-		output = fmt.Sprintf("%- "+fmtw+"s", output)
-
-		fmt.Fprintf(w, "%s\t%v\t%v\t%s\n", program.Name, stateStr, output, nextStr)
+	if gui := self.gui; gui != nil {
+		gui.Stop()
 	}
 }
 
-func (self *Dashboard) renderLog(w io.Writer) {
-	for _, line := range self.lines {
-		fmt.Fprintln(w, line)
-	}
-}
+// func (self *Dashboard) renderLog(w io.Writer) {
+// 	for _, line := range self.lines {
+// 		fmt.Fprintln(w, line)
+// 	}
+// }
 
-func (self *Dashboard) scanAndEmitLogBuffer() {
-	for {
-		var scanner = bufio.NewScanner(self.lineBuffer)
+// func (self *Dashboard) scanAndEmitLogBuffer() {
+// 	for {
+// 		var scanner = bufio.NewScanner(self.lineBuffer)
 
-		for scanner.Scan() {
-			if line := strings.TrimSpace(scanner.Text()); line != `` {
-				self.lines = append(self.lines, line)
-			}
-		}
+// 		for scanner.Scan() {
+// 			if line := strings.TrimSpace(scanner.Text()); line != `` {
+// 				self.lines = append(self.lines, line)
+// 			}
+// 		}
 
-		time.Sleep(125 * time.Millisecond)
-	}
-}
+// 		time.Sleep(125 * time.Millisecond)
+// 	}
+// }
 
-func (self *Dashboard) Write(p []byte) (int, error) {
-	return self.lineBuffer.Write(p)
-}
+// func (self *Dashboard) Write(p []byte) (int, error) {
+// 	return self.lineBuffer.Write(p)
+// }
 
 func (self *Dashboard) GetLevel(module string) logging.Level {
 	return self.level

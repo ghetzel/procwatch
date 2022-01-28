@@ -3,10 +3,10 @@ module github.com/ghetzel/procwatch
 go 1.17
 
 require (
-	github.com/NonerKao/color-aware-tabwriter v0.0.0-20171005123016-aa1eec33dba0
 	github.com/c-bata/go-prompt v0.2.2 // indirect
 	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.7.0
+	github.com/gdamore/tcell/v2 v2.4.1-0.20210905002822-f057f0a857a1
 	github.com/ghetzel/cli v1.17.0
 	github.com/ghetzel/diecast v1.21.0
 	github.com/ghetzel/go-stockutil v1.10.3
@@ -14,16 +14,15 @@ require (
 	github.com/go-ini/ini v1.42.0
 	github.com/go-test/deep v1.0.1 // indirect
 	github.com/husobee/vestigo v1.1.0
-	github.com/jroimartin/gocui v0.4.0
 	github.com/mattn/go-shellwords v1.0.9
 	github.com/natefinch/lumberjack v2.0.0+incompatible
-	github.com/nsf/termbox-go v0.0.0-20190121233118-02980233997d // indirect
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
 	github.com/pkg/term v0.0.0-20180730021639-bffc007b7fd5 // indirect
+	github.com/rivo/tview v0.0.0-20220106183741-90d72bc664f5
 	github.com/robfig/cron v1.2.0
 	github.com/smartystreets/goconvey v0.0.0-20190222223459-a17d461953aa // indirect
 	github.com/stretchr/testify v1.7.0
-	github.com/urfave/negroni v1.0.0
+	github.com/urfave/negroni v1.0.1-0.20191011213438-f4316798d5d3
 	gopkg.in/ini.v1 v1.42.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
 )
@@ -44,6 +43,7 @@ require (
 	github.com/dsnet/compress v0.0.0-20171208185109-cc9eb1d7ad76 // indirect
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5 // indirect
 	github.com/fatih/structs v1.0.0 // indirect
+	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/ghetzel/argonaut v0.0.0-20180428155514-51604c68ce30 // indirect
 	github.com/ghetzel/friendscript v0.6.6 // indirect
 	github.com/ghetzel/go-defaults v1.2.0 // indirect
@@ -80,11 +80,12 @@ require (
 	github.com/kylelemons/go-gypsy v0.0.0-20160905020020-08cad365cd28 // indirect
 	github.com/kyokomi/emoji v2.1.0+incompatible // indirect
 	github.com/lib/pq v1.1.0 // indirect
+	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mafredri/cdp v0.19.2 // indirect
 	github.com/martinlindhe/unit v0.0.0-20190604142932-3b6be53d49af // indirect
 	github.com/mattn/go-colorable v0.1.6 // indirect
 	github.com/mattn/go-isatty v0.0.12 // indirect
-	github.com/mattn/go-runewidth v0.0.4 // indirect
+	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/mattn/go-tty v0.0.0-20180219170247-931426f7535a // indirect
 	github.com/mcuadros/go-defaults v1.1.0 // indirect
 	github.com/melbahja/goph v1.2.1 // indirect
@@ -100,6 +101,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/sftp v1.12.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/russross/blackfriday/v2 v2.0.1 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/signalsciences/tlstext v1.2.0 // indirect
@@ -110,6 +112,7 @@ require (
 	github.com/uber/jaeger-client-go v2.24.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	github.com/yosssi/gohtml v0.0.0-20180130040904-97fbf36f4aa8 // indirect
+	github.com/yuin/gopher-lua v0.0.0-20190514113301-1cd887cd7036 // indirect
 	github.com/ziutek/mymysql v1.5.4 // indirect
 	go.uber.org/atomic v1.6.0 // indirect
 	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83 // indirect
