@@ -1,17 +1,23 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"math"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/gdamore/tcell/v2"
+	"github.com/ghetzel/go-stockutil/convutil"
 	"github.com/ghetzel/go-stockutil/log"
+	"github.com/ghetzel/go-stockutil/maputil"
 	"github.com/ghetzel/procwatch"
+	"github.com/ghetzel/sysfact"
 	logging "github.com/op/go-logging"
 	"github.com/rivo/tview"
 )
@@ -36,43 +42,50 @@ type dashboardPage interface {
 }
 
 type Dashboard struct {
-	gui             *tview.Application
-	manager         *procwatch.Manager
-	paused          bool
-	logHeight       int
-	lines           []string
-	lineno          int
-	level           logging.Level
-	widestStatusYet int
-	lineBuffer      *bytes.Buffer
-	guictx          context.Context
-	targetFPS       int
-	curpage         string
-	curpageindex    int
-	lastpage        string
-	framelock       sync.Mutex
-	frame           int64
-	hideHeader      bool
-	pagelist        []dashboardPage
-	rootLayout      *tview.Flex
-	header          *tview.Frame
-	pages           *tview.Pages
-	navbar          *tview.Table
+	gui               *tview.Application
+	manager           *procwatch.Manager
+	paused            bool
+	logHeight         int
+	lines             []string
+	lineno            int
+	level             logging.Level
+	widestStatusYet   int
+	lineBuffer        *bytes.Buffer
+	guictx            context.Context
+	targetFPS         int
+	curpage           string
+	curpageindex      int
+	lastpage          string
+	framelock         sync.Mutex
+	frame             int64
+	hideHeader        bool
+	pagelist          []dashboardPage
+	rootLayout        *tview.Flex
+	header            *tview.Frame
+	pages             *tview.Pages
+	navbar            *tview.Table
+	sysinfo           *sysfact.Reporter
+	sysinfoInterval   time.Duration
+	sysinfoLastReport time.Time
+	sysinfoData       *maputil.Map
 }
 
 func NewDashboard(manager *procwatch.Manager) *Dashboard {
 	return &Dashboard{
-		manager:    manager,
-		lines:      make([]string, 0),
-		lineBuffer: bytes.NewBuffer(nil),
-		guictx:     context.Background(),
-		targetFPS:  8,
+		manager:         manager,
+		lines:           make([]string, 0),
+		lineBuffer:      bytes.NewBuffer(nil),
+		guictx:          context.Background(),
+		targetFPS:       8,
+		sysinfo:         sysfact.NewReporter(),
+		sysinfoInterval: time.Second,
 	}
 }
 
 func (self *Dashboard) Run() error {
 	self.gui = tview.NewApplication()
 	go self.startDrawUpdates()
+	go self.scanAndEmitLogBuffer()
 	self.init()
 
 	if err := self.setupKeybindings(); err != nil {
@@ -148,6 +161,8 @@ func (self *Dashboard) redraw() {
 	self.framelock.Lock()
 	self.frame += 1
 	defer self.framelock.Unlock()
+
+	go self.refreshSystemInfo()
 	self.updateHeaderDetails()
 
 	self.gui.QueueUpdateDraw(func() {
@@ -168,6 +183,17 @@ func (self *Dashboard) startDrawUpdates() {
 	}
 }
 
+func (self *Dashboard) refreshSystemInfo() {
+	if self.sysinfoData == nil || time.Since(self.sysinfoLastReport) >= self.sysinfoInterval {
+		if report, err := self.sysinfo.Report(); err == nil {
+			self.sysinfoData = maputil.M(report)
+			self.sysinfoLastReport = time.Now()
+		} else {
+			log.Errorf("sysinfo: %v", err)
+		}
+	}
+}
+
 func (self *Dashboard) updateHeaderDetails() {
 	if self.header == nil {
 		return
@@ -180,7 +206,7 @@ func (self *Dashboard) updateHeaderDetails() {
 	self.header.AddText(fmt.Sprintf("[#aaaaaa]proc[green::b]watch[-] [#444444]v%s[-]", procwatch.Version), true, tview.AlignLeft, tcell.ColorReset)
 
 	if states := page.GetToggleStates(); len(states) > 0 {
-		self.header.AddText("ACTIONS", true, tview.AlignLeft, tcell.ColorReset)
+		self.header.AddText("    [orange]PAGE OPTIONS[-]", true, tview.AlignLeft, tcell.ColorReset)
 
 		for _, state := range states {
 			var scol = `red`
@@ -196,13 +222,29 @@ func (self *Dashboard) updateHeaderDetails() {
 		}
 	}
 
-	var info = []string{
-		"[white]LOAD[-] [#bbbbbb]24.32 [#999999]15.32 [#777777]7.09[-:-:-]",
-		fmt.Sprintf("[white]CPU[#999999]x%d[-] [blue::b]\u25a0\u25a0\u25a0\u25a0\u25a0[blue::d]\u25a0\u25a0\u25a0\u25a0\u25a0[-:-:-]", 8),
-		fmt.Sprintf("[white]MEM[#999999] 128G[-] [green::b]\u25a0\u25a0\u25a0\u25a0\u25a0[red::b]\u25a0[#999999::d]\u25a0\u25a0\u25a0\u25a0[-:-:-]"),
-	}
+	if self.sysinfoData != nil {
+		var memsz, memunit = convutil.Bytes(self.sysinfoData.Int(`memory.total`)).Auto()
+		var memPctInt = int(math.RoundToEven(self.sysinfoData.Float(`memory.percent_used`) / 10.0))
 
-	self.header.AddText(strings.Join(info, `  `), true, tview.AlignRight, tcell.ColorReset)
+		var info = []string{
+			"[white]LOAD[-] [#bbbbbb]24.32 [#999999]15.32 [#777777]7.09[-:-:-]",
+			fmt.Sprintf(
+				"[white]CPU[#999999]x%d[-] [blue::b]%s[blue::d]%s[-:-:-]",
+				self.sysinfoData.NInt(`cpu.count`),
+				strings.Repeat("\u25a0", 0),
+				strings.Repeat("\u25a0", 10),
+			),
+			fmt.Sprintf(
+				"[white]MEM[#999999] %d%s[-] [green::b]%s[#999999::d]%s[-:-:-]",
+				int(memsz),
+				string(memunit[0]),
+				strings.Repeat("\u25a0", memPctInt),
+				strings.Repeat("\u25a0", 10-memPctInt),
+			),
+		}
+
+		self.header.AddText(strings.Join(info, `  `), true, tview.AlignRight, tcell.ColorReset)
+	}
 }
 
 func (self *Dashboard) confirmExit() {
@@ -305,29 +347,29 @@ func (self *Dashboard) navpage(forward bool) error {
 	return nil
 }
 
-// func (self *Dashboard) renderLog(w io.Writer) {
-// 	for _, line := range self.lines {
-// 		fmt.Fprintln(w, line)
-// 	}
-// }
+func (self *Dashboard) renderLog(w io.Writer) {
+	for _, line := range self.lines {
+		fmt.Fprintln(w, line)
+	}
+}
 
-// func (self *Dashboard) scanAndEmitLogBuffer() {
-// 	for {
-// 		var scanner = bufio.NewScanner(self.lineBuffer)
+func (self *Dashboard) scanAndEmitLogBuffer() {
+	for {
+		var scanner = bufio.NewScanner(self.lineBuffer)
 
-// 		for scanner.Scan() {
-// 			if line := strings.TrimSpace(scanner.Text()); line != `` {
-// 				self.lines = append(self.lines, line)
-// 			}
-// 		}
+		for scanner.Scan() {
+			if line := strings.TrimSpace(scanner.Text()); line != `` {
+				self.lines = append(self.lines, line)
+			}
+		}
 
-// 		time.Sleep(125 * time.Millisecond)
-// 	}
-// }
+		time.Sleep(125 * time.Millisecond)
+	}
+}
 
-// func (self *Dashboard) Write(p []byte) (int, error) {
-// 	return self.lineBuffer.Write(p)
-// }
+func (self *Dashboard) Write(p []byte) (int, error) {
+	return self.lineBuffer.Write(p)
+}
 
 func (self *Dashboard) GetLevel(module string) logging.Level {
 	return self.level

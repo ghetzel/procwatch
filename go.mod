@@ -10,6 +10,7 @@ require (
 	github.com/ghetzel/cli v1.17.0
 	github.com/ghetzel/diecast v1.21.0
 	github.com/ghetzel/go-stockutil v1.10.3
+	github.com/ghetzel/sysfact v0.8.0
 	github.com/go-cmd/cmd v1.0.4
 	github.com/go-ini/ini v1.42.0
 	github.com/go-test/deep v1.0.1 // indirect
@@ -40,6 +41,7 @@ require (
 	github.com/cenkalti/backoff v2.1.1+incompatible // indirect
 	github.com/danwakefield/fnmatch v0.0.0-20160403171240-cbb64ac3d964 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/diegomagdaleno/whatmac v0.0.1 // indirect
 	github.com/dlclark/regexp2 v1.2.0 // indirect
 	github.com/dsnet/compress v0.0.0-20171208185109-cc9eb1d7ad76 // indirect
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5 // indirect
@@ -129,6 +131,7 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	howett.net/plist v0.0.0-20200419221736-3b63eb3a43b5 // indirect
 	k8s.io/apimachinery v0.21.0 // indirect
 	k8s.io/client-go v11.0.0+incompatible // indirect
 )
