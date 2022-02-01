@@ -206,7 +206,7 @@ func (self *Dashboard) updateHeaderDetails() {
 	self.header.AddText(fmt.Sprintf("[#aaaaaa]proc[green::b]watch[-] [#444444]v%s[-]", procwatch.Version), true, tview.AlignLeft, tcell.ColorReset)
 
 	if states := page.GetToggleStates(); len(states) > 0 {
-		self.header.AddText("    [orange]PAGE OPTIONS[-]", true, tview.AlignLeft, tcell.ColorReset)
+		self.header.AddText("    [orange]Shortcuts[-]", true, tview.AlignLeft, tcell.ColorReset)
 
 		for _, state := range states {
 			var scol = `red`
@@ -227,15 +227,15 @@ func (self *Dashboard) updateHeaderDetails() {
 		var memPctInt = int(math.RoundToEven(self.sysinfoData.Float(`memory.percent_used`) / 10.0))
 
 		var info = []string{
-			"[white]LOAD[-] [#bbbbbb]24.32 [#999999]15.32 [#777777]7.09[-:-:-]",
+			// "[white]LOAD[-] [#bbbbbb]24.32 [#999999]15.32 [#777777]7.09[-:-:-]",
 			fmt.Sprintf(
-				"[white]CPU[#999999]x%d[-] [blue::b]%s[blue::d]%s[-:-:-]",
+				"[white]CPU[#999999]x%d[-] [blue::b]%s[#444444::d]%s[-:-:-]",
 				self.sysinfoData.NInt(`cpu.count`),
 				strings.Repeat("\u25a0", 0),
 				strings.Repeat("\u25a0", 10),
 			),
 			fmt.Sprintf(
-				"[white]MEM[#999999] %d%s[-] [green::b]%s[#999999::d]%s[-:-:-]",
+				"[white]MEM[#999999] %d%s[-] [green::b]%s[#444444::d]%s[-:-:-]",
 				int(memsz),
 				string(memunit[0]),
 				strings.Repeat("\u25a0", memPctInt),
@@ -284,8 +284,8 @@ func (self *Dashboard) setupKeybindings() error {
 
 		switch event.Rune() {
 		case 'q', 'Q':
-			// self.confirmExit()
-			self.Stop()
+			self.confirmExit()
+			// self.Stop()
 			return nil
 		case 'h':
 			self.hideHeader = !self.hideHeader
