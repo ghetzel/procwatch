@@ -162,10 +162,10 @@ func (self *Dashboard) redraw() {
 	self.frame += 1
 	defer self.framelock.Unlock()
 
-	go self.refreshSystemInfo()
-	self.updateHeaderDetails()
-
 	self.gui.QueueUpdateDraw(func() {
+		self.refreshSystemInfo()
+		self.updateHeaderDetails()
+
 		var page, changed = self.currentPage()
 		if err := page.Update(); err != nil {
 			log.Errorf("update failed: %v", err)
@@ -225,14 +225,22 @@ func (self *Dashboard) updateHeaderDetails() {
 	if self.sysinfoData != nil {
 		var memsz, memunit = convutil.Bytes(self.sysinfoData.Int(`memory.total`)).Auto()
 		var memPctInt = int(math.RoundToEven(self.sysinfoData.Float(`memory.percent_used`) / 10.0))
+		var cpuU = int(math.RoundToEven(self.sysinfoData.Float(`cpu.usage.user`) / 10.0))
+		var cpuS = int(math.RoundToEven(self.sysinfoData.Float(`cpu.usage.system`) / 10.0))
 
 		var info = []string{
-			// "[white]LOAD[-] [#bbbbbb]24.32 [#999999]15.32 [#777777]7.09[-:-:-]",
 			fmt.Sprintf(
-				"[white]CPU[#999999]x%d[-] [blue::b]%s[#444444::d]%s[-:-:-]",
+				"[white]LOAD[-] [#bbbbbb]%.2f [#999999]%.2f [#777777]%.2f[-:-:-]",
+				self.sysinfoData.Float(`system.load.last_1m`),
+				self.sysinfoData.Float(`system.load.last_5m`),
+				self.sysinfoData.Float(`system.load.last_15m`),
+			),
+			fmt.Sprintf(
+				"[white]CPU[#999999]x%d[-] [blue:-:-]%s[blue::b]%s[#444444::d]%s[-:-:-]",
 				self.sysinfoData.NInt(`cpu.count`),
-				strings.Repeat("\u25a0", 0),
-				strings.Repeat("\u25a0", 10),
+				strings.Repeat("\u25a0", cpuU),
+				strings.Repeat("\u25a0", cpuS),
+				strings.Repeat("\u25a0", 10-cpuU-cpuS),
 			),
 			fmt.Sprintf(
 				"[white]MEM[#999999] %d%s[-] [green::b]%s[#444444::d]%s[-:-:-]",
@@ -264,6 +272,7 @@ func (self *Dashboard) confirmExit() {
 
 	modal.SetDoneFunc(func(index int, label string) {
 		self.gui.SetRoot(self.rootLayout, true)
+
 		if index > 0 {
 			self.Stop()
 		}

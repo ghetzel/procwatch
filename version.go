@@ -1,3 +1,3 @@
 package procwatch
 
-var Version = `0.4.4`
+var Version = `0.4.5`

@@ -9,8 +9,8 @@ require (
 	github.com/gdamore/tcell/v2 v2.4.1-0.20210905002822-f057f0a857a1
 	github.com/ghetzel/cli v1.17.0
 	github.com/ghetzel/diecast v1.21.0
-	github.com/ghetzel/go-stockutil v1.10.3
-	github.com/ghetzel/sysfact v0.8.0
+	github.com/ghetzel/go-stockutil v1.10.4
+	github.com/ghetzel/sysfact v0.8.1
 	github.com/go-cmd/cmd v1.0.4
 	github.com/go-ini/ini v1.42.0
 	github.com/go-test/deep v1.0.1 // indirect
