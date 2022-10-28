@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ghetzel/cli"
+	"github.com/ghetzel/go-stockutil/executil"
 	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/pathutil"
 	"github.com/ghetzel/procwatch"
@@ -34,6 +35,7 @@ func main() {
 		cli.StringFlag{
 			Name:   `config, c`,
 			Usage:  `The configuration file to load`,
+			Value:  executil.RootOrString(`/etc/procwatch.ini`, `~/.config/procwatch/procwatch.ini`),
 			EnvVar: `PROCWATCH_CONFIG`,
 		},
 		cli.DurationFlag{
