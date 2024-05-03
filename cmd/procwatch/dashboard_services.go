@@ -10,6 +10,7 @@ import (
 	"github.com/ghetzel/go-stockutil/timeutil"
 	"github.com/ghetzel/go-stockutil/typeutil"
 	"github.com/ghetzel/procwatch"
+	"github.com/ghetzel/procwatch/client"
 	"github.com/rivo/tview"
 )
 
@@ -33,24 +34,28 @@ func (self *ServicesDashboardPage) Color() tcell.Color {
 	return tcell.ColorBlue
 }
 
-func (self *ServicesDashboardPage) getSelectedProgram() (*procwatch.Program, bool) {
+func (self *ServicesDashboardPage) getSelectedProgram() (*client.Program, bool) {
 	var row, _ = self.table.GetSelection()
 
 	if namecell := self.table.GetCell(row, 0); namecell != nil {
-		return self.dash.manager.Program(namecell.Text)
-	} else {
-		return nil, false
+		if p, err := self.dash.client.GetProgram(namecell.Text); err == nil {
+			return p, true
+		}
 	}
+
+	return nil, false
 }
 
 func (self *ServicesDashboardPage) HandleKeyEvent(event *tcell.EventKey) *tcell.EventKey {
 	if program, ok := self.getSelectedProgram(); ok {
-		switch event.Rune() {
+		switch event.Key() {
 		// case 'l':
 		// log view
-		case 'R':
+		case tcell.KeyCtrlR:
 			go program.Restart()
-		case 'K':
+		case tcell.KeyCtrlS:
+			go program.Start()
+		case tcell.KeyCtrlK:
 			go program.Stop()
 		}
 	}
@@ -74,8 +79,15 @@ func (self *ServicesDashboardPage) Update() error {
 	var maxNameLen int = 12
 	var maxScheduleLen int = 9
 	var maxRemainLen int = 12
+	var programs []*client.Program
 
-	for _, program := range self.dash.manager.Programs() {
+	if pgm, err := self.dash.client.GetPrograms(); err == nil {
+		programs = pgm
+	} else {
+		return err
+	}
+
+	for _, program := range programs {
 		if l := len(program.Name); l > maxNameLen {
 			maxNameLen = l
 		}
@@ -100,7 +112,7 @@ func (self *ServicesDashboardPage) Update() error {
 		self.table.SetCell(0, i, cell)
 	}
 
-	for row, program := range self.dash.manager.Programs() {
+	for row, program := range programs {
 		var hilite = self.colorForProgramState(program.State)
 		var nextstr string
 		var cells = make([]*tview.TableCell, 5)

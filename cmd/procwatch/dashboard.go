@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/ghetzel/go-stockutil/log"
 	"github.com/ghetzel/go-stockutil/maputil"
 	"github.com/ghetzel/procwatch"
+	"github.com/ghetzel/procwatch/client"
 	"github.com/ghetzel/sysfact"
 	logging "github.com/op/go-logging"
 	"github.com/rivo/tview"
@@ -43,7 +45,8 @@ type dashboardPage interface {
 
 type Dashboard struct {
 	gui               *tview.Application
-	manager           *procwatch.Manager
+	client            *client.Client
+	remoteManager     procwatch.Manager
 	paused            bool
 	logHeight         int
 	lines             []string
@@ -70,9 +73,8 @@ type Dashboard struct {
 	sysinfoData       *maputil.Map
 }
 
-func NewDashboard(manager *procwatch.Manager) *Dashboard {
-	return &Dashboard{
-		manager:         manager,
+func NewDashboard(url string) (*Dashboard, error) {
+	var dash = &Dashboard{
 		lines:           make([]string, 0),
 		lineBuffer:      bytes.NewBuffer(nil),
 		guictx:          context.Background(),
@@ -80,13 +82,25 @@ func NewDashboard(manager *procwatch.Manager) *Dashboard {
 		sysinfo:         sysfact.NewReporter(),
 		sysinfoInterval: time.Second,
 	}
+
+	if c, err := client.NewClient(url); err == nil {
+		dash.client = c
+		return dash, nil
+	} else {
+		return nil, err
+	}
 }
 
 func (self *Dashboard) Run() error {
 	self.gui = tview.NewApplication()
 	go self.startDrawUpdates()
 	go self.scanAndEmitLogBuffer()
-	self.init()
+
+	if err := self.refreshRemoteInfo(); err == nil {
+		self.init()
+	} else {
+		return err
+	}
 
 	if err := self.setupKeybindings(); err != nil {
 		return err
@@ -96,10 +110,6 @@ func (self *Dashboard) Run() error {
 }
 
 func (self *Dashboard) Stop() {
-	if manager := self.manager; manager != nil {
-		manager.Stop(false)
-	}
-
 	if gui := self.gui; gui != nil {
 		gui.Stop()
 	}
@@ -116,7 +126,7 @@ func (self *Dashboard) init() {
 
 	for i, page := range []dashboardPage{
 		NewServicesDashboardPage(self),
-		NewLogsDashboardPage(self),
+		// NewLogsDashboardPage(self),
 	} {
 		var id = page.String()
 
@@ -194,6 +204,15 @@ func (self *Dashboard) refreshSystemInfo() {
 	}
 }
 
+func (self *Dashboard) refreshRemoteInfo() error {
+	if nfo, err := self.client.ManagerInfo(); err == nil {
+		self.remoteManager = *nfo
+		return nil
+	} else {
+		return err
+	}
+}
+
 func (self *Dashboard) updateHeaderDetails() {
 	if self.header == nil {
 		return
@@ -203,7 +222,14 @@ func (self *Dashboard) updateHeaderDetails() {
 
 	self.header.Clear()
 	self.header.SetBorderPadding(0, 0, 1, 1)
-	self.header.AddText(fmt.Sprintf("[#aaaaaa]proc[green::b]watch[-] [#444444]v%s[-]", procwatch.Version), true, tview.AlignLeft, tcell.ColorReset)
+
+	self.header.AddText(fmt.Sprintf("[#444444]client: v%s[-]", procwatch.Version), false, tview.AlignRight, tcell.ColorReset)
+
+	if rv := self.remoteManager.Version; rv != `` {
+		self.header.AddText(fmt.Sprintf("[#aaaaaa]proc[green::b]watch[-] [#444444]v%s[-]", rv), true, tview.AlignLeft, tcell.ColorReset)
+	} else {
+		self.header.AddText("[#aaaaaa]proc[green::b]watch[-]", true, tview.AlignLeft, tcell.ColorReset)
+	}
 
 	if states := page.GetToggleStates(); len(states) > 0 {
 		self.header.AddText("    [orange]Shortcuts[-]", true, tview.AlignLeft, tcell.ColorReset)
@@ -259,7 +285,7 @@ func (self *Dashboard) confirmExit() {
 	var modal = tview.NewModal()
 
 	modal.SetTitle("Confirm exit...")
-	modal.SetText("Are you sure you want to stop all services and exit the program?")
+	modal.SetText("Are you sure you want to exit?")
 	modal.SetBackgroundColor(tcell.ColorRed)
 	modal.SetTextColor(tcell.ColorYellow)
 	modal.SetButtonBackgroundColor(tcell.ColorRed)
@@ -267,14 +293,14 @@ func (self *Dashboard) confirmExit() {
 
 	modal.AddButtons([]string{
 		`Cancel`,
-		`Stop & Exit`,
+		`Exit`,
 	})
 
 	modal.SetDoneFunc(func(index int, label string) {
 		self.gui.SetRoot(self.rootLayout, true)
 
 		if index > 0 {
-			self.Stop()
+			os.Exit(0)
 		}
 	})
 
@@ -289,20 +315,16 @@ func (self *Dashboard) setupKeybindings() error {
 		case tcell.KeyTAB:
 			self.navpage(true)
 			return nil
-		}
-
-		switch event.Rune() {
-		case 'q', 'Q':
-			self.confirmExit()
-			// self.Stop()
+		case tcell.KeyCtrlQ:
+			self.Stop()
 			return nil
-		case 'h':
+		case tcell.KeyCtrlH:
 			self.hideHeader = !self.hideHeader
 			return nil
+		default:
+			var board, _ = self.currentPage()
+			return board.HandleKeyEvent(event)
 		}
-
-		var board, _ = self.currentPage()
-		return board.HandleKeyEvent(event)
 	})
 
 	return nil

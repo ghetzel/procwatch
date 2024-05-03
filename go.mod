@@ -1,25 +1,25 @@
 module github.com/ghetzel/procwatch
 
-go 1.18
+go 1.22.2
 
 require (
-	github.com/dustin/go-humanize v1.0.0
-	github.com/fatih/color v1.13.0
-	github.com/gdamore/tcell/v2 v2.5.3
+	github.com/dustin/go-humanize v1.0.1
+	github.com/fatih/color v1.16.0
+	github.com/gdamore/tcell/v2 v2.7.4
 	github.com/ghetzel/cli v1.17.0
 	github.com/ghetzel/diecast v1.22.1
-	github.com/ghetzel/go-stockutil v1.11.3
+	github.com/ghetzel/go-stockutil v1.11.4
 	github.com/ghetzel/sysfact v0.8.2
-	github.com/go-cmd/cmd v1.4.1
+	github.com/go-cmd/cmd v1.4.2
 	github.com/go-ini/ini v1.67.0
 	github.com/husobee/vestigo v1.1.1
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/natefinch/lumberjack v2.0.0+incompatible
-	github.com/nxadm/tail v1.4.8
+	github.com/nxadm/tail v1.4.11
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
-	github.com/rivo/tview v0.0.0-20220916081518-2e69b7385a37
+	github.com/rivo/tview v0.0.0-20240501114654-1f4d5e8f881d
 	github.com/robfig/cron v1.2.0
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.9.0
 	github.com/urfave/negroni v1.0.0
 )
 
@@ -40,7 +40,7 @@ require (
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
-	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/ghetzel/go-defaults v1.2.0 // indirect
 	github.com/ghetzel/ratelimit v0.0.0-20200513232932-b28727c55ae1 // indirect
@@ -78,9 +78,9 @@ require (
 	github.com/lib/pq v1.10.4 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/martinlindhe/unit v0.0.0-20210313160520-19b60e03648d // indirect
-	github.com/mattn/go-colorable v0.1.12 // indirect
-	github.com/mattn/go-isatty v0.0.16 // indirect
-	github.com/mattn/go-runewidth v0.0.13 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/mcuadros/go-defaults v1.2.0 // indirect
 	github.com/melbahja/goph v1.3.0 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
@@ -94,7 +94,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/sftp v1.13.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rivo/uniseg v0.4.2 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/signalsciences/tlstext v1.3.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
@@ -110,16 +110,16 @@ require (
 	github.com/ziutek/mymysql v1.5.4 // indirect
 	go.uber.org/atomic v1.4.0 // indirect
 	golang.org/x/crypto v0.0.0-20220331220935-ae2d96664a29 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
-	golang.org/x/net v0.1.0 // indirect
+	golang.org/x/mod v0.8.0 // indirect
+	golang.org/x/net v0.6.0 // indirect
 	golang.org/x/oauth2 v0.1.0 // indirect
-	golang.org/x/sys v0.1.0 // indirect
-	golang.org/x/term v0.1.0 // indirect
-	golang.org/x/text v0.4.0 // indirect
-	golang.org/x/tools v0.1.12 // indirect
+	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/term v0.17.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/tools v0.6.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.0.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/neurosnap/sentences.v1 v1.0.7 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
