@@ -44,6 +44,7 @@ func (self LogLine) IsEmpty() bool {
 
 type Manager struct {
 	ConfigFile            string
+	Version               string      `json:"version"                 ini:"-"`
 	LogFile               string      `json:"logfile"                 ini:"logfile"`
 	LogFileMaxBytes       string      `json:"logfile_maxbytes"        ini:"logfile_maxbytes"`
 	LogFileBackups        int         `json:"logfile_backups"         ini:"logfile_backups"`
@@ -74,6 +75,7 @@ type Manager struct {
 
 func NewManager() *Manager {
 	manager := &Manager{
+		Version:               Version,
 		LogFileMaxBytes:       `50MB`,
 		StdoutLogfileMaxBytes: `50MB`,
 		StderrLogfileMaxBytes: `50MB`,
@@ -258,20 +260,20 @@ func (self *Manager) AddEventHandler(handler EventHandler) {
 // Process Management States
 //
 // STOPPED -> STARTING
-//          |- up for startsecs? -> RUNNING
-//          |                       |- manually stopped? -> STOPPING
-//          |                       |                       |- stopped in time? -> [STOPPED]
-//          |                       |                       \- no?              -> [FATAL]
-//          |                       \- process exited?   -> EXITED -> STARTING...
-//          |
-//          |- no?
-//          |  \- should restart? -> BACKOFF -> STARTING...
-//          |                     -> [FATAL]
-//          |
-//          \- manually stopped?  -> STOPPING
-//                                   |- stopped in time? -> [STOPPED]
-//                                   \- no?              -> [FATAL]
 //
+//	|- up for startsecs? -> RUNNING
+//	|                       |- manually stopped? -> STOPPING
+//	|                       |                       |- stopped in time? -> [STOPPED]
+//	|                       |                       \- no?              -> [FATAL]
+//	|                       \- process exited?   -> EXITED -> STARTING...
+//	|
+//	|- no?
+//	|  \- should restart? -> BACKOFF -> STARTING...
+//	|                     -> [FATAL]
+//	|
+//	\- manually stopped?  -> STOPPING
+//	                         |- stopped in time? -> [STOPPED]
+//	                         \- no?              -> [FATAL]
 func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
 	var isStopping = self.stopping
 	defer checkLock.Done()
