@@ -65,69 +65,74 @@ func main() {
 			return
 		}
 
-		if c.Bool(`dashboard`) {
-			if dashboard, err := NewDashboard(c.String(`client-address`)); err == nil {
-				log.SetOutput(io.Discard)
-				log.FatalIf(dashboard.Run())
-			} else {
-				log.FatalIf(err)
-			}
-		} else {
-			var manager = procwatch.NewManagerFromConfig(configFile)
-			signalChan := make(chan os.Signal, 1)
-			signal.Notify(signalChan, os.Interrupt)
+		var manager = procwatch.NewManagerFromConfig(configFile)
+		signalChan := make(chan os.Signal, 1)
+		signal.Notify(signalChan, os.Interrupt)
 
-			go func() {
-				for sig := range signalChan {
-					log.Infof("Received signal %v, stopping all programs...", sig)
-					exitCode := make(chan int)
+		go func() {
+			for sig := range signalChan {
+				log.Infof("Received signal %v, stopping all programs...", sig)
+				exitCode := make(chan int)
+
+				go func() {
+					manager.Stop(false)
+					exitCode <- 0
+				}()
+
+				select {
+				case code := <-exitCode:
+					log.Debugf("main: Stop completed with exit code %d", code)
+					os.Exit(code)
+					return
+
+				case <-time.After(c.Duration(`max-stop-timeout`)):
+					log.Warningf("Timed out waiting for programs to stop, force killing them...")
+					reallyStop := make(chan error)
 
 					go func() {
-						manager.Stop(false)
-						exitCode <- 0
+						manager.Stop(true)
+						reallyStop <- nil
 					}()
 
 					select {
-					case code := <-exitCode:
-						log.Debugf("main: Stop completed with exit code %d", code)
-						os.Exit(code)
-						return
+					case err := <-reallyStop:
+						log.Fatalf("Received error force killing programs: %v", err)
 
 					case <-time.After(c.Duration(`max-stop-timeout`)):
-						log.Warningf("Timed out waiting for programs to stop, force killing them...")
-						reallyStop := make(chan error)
+						log.Errorf("Failed to stop all programs. Here are the PIDs that we were managing:")
 
-						go func() {
-							manager.Stop(true)
-							reallyStop <- nil
-						}()
-
-						select {
-						case err := <-reallyStop:
-							log.Fatalf("Received error force killing programs: %v", err)
-
-						case <-time.After(c.Duration(`max-stop-timeout`)):
-							log.Errorf("Failed to stop all programs. Here are the PIDs that we were managing:")
-
-							for _, program := range manager.Programs() {
-								log.Errorf("  Program: name=%s, state=%s, pid=%d", program.Name, program.State, program.ProcessID)
-							}
+						for _, program := range manager.Programs() {
+							log.Errorf("  Program: name=%s, state=%s, pid=%d", program.Name, program.State, program.ProcessID)
 						}
 					}
-
-					os.Exit(3)
-					return
 				}
-			}()
 
-			if err := manager.Initialize(); err == nil {
-				go manager.Run()
-				manager.Wait()
-			} else {
-				log.Fatal(err)
+				os.Exit(3)
+				return
 			}
+		}()
+
+		if err := manager.Initialize(); err == nil {
+			go manager.Run()
+
+			if c.Bool(`dashboard`) {
+				go launchDashboard(c.String(`client-address`))
+			}
+
+			manager.Wait()
+		} else {
+			log.Fatal(err)
 		}
 	}
 
 	app.Run(os.Args)
+}
+
+func launchDashboard(clientAddress string) {
+	if dashboard, err := NewDashboard(clientAddress); err == nil {
+		log.SetOutput(io.Discard)
+		log.FatalIf(dashboard.Run())
+	} else {
+		log.FatalIf(err)
+	}
 }

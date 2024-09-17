@@ -4,22 +4,22 @@ go 1.22.2
 
 require (
 	github.com/dustin/go-humanize v1.0.1
-	github.com/fatih/color v1.16.0
+	github.com/fatih/color v1.17.0
 	github.com/gdamore/tcell/v2 v2.7.4
 	github.com/ghetzel/cli v1.17.0
 	github.com/ghetzel/diecast v1.22.1
 	github.com/ghetzel/go-stockutil v1.11.4
 	github.com/ghetzel/sysfact v0.8.2
-	github.com/go-cmd/cmd v1.4.2
+	github.com/go-cmd/cmd v1.4.3
 	github.com/go-ini/ini v1.67.0
 	github.com/husobee/vestigo v1.1.1
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/nxadm/tail v1.4.11
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
-	github.com/rivo/tview v0.0.0-20240501114654-1f4d5e8f881d
+	github.com/rivo/tview v0.0.0-20240818110301-fd649dbf1223
 	github.com/robfig/cron v1.2.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.8.0
 	github.com/urfave/negroni v1.0.0
 )
 
@@ -113,7 +113,7 @@ require (
 	golang.org/x/mod v0.8.0 // indirect
 	golang.org/x/net v0.6.0 // indirect
 	golang.org/x/oauth2 v0.1.0 // indirect
-	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/sys v0.18.0 // indirect
 	golang.org/x/term v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
