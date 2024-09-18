@@ -14,6 +14,7 @@ var actualStates = make([]ProgramState, 0)
 func newManager(config string) (*Manager, error) {
 	log.Debugf("Creating new manager...")
 	manager := NewManagerFromConfig(path.Join(`./tests`, config+`.ini`))
+	manager.Server.Address = `:0`
 	actualStates = nil
 
 	if err := manager.Initialize(); err == nil {
@@ -130,10 +131,13 @@ func TestFatalAutorestartProgramLifecycle(t *testing.T) {
 
 	assert.Equal([]ProgramState{
 		ProgramStarting,
+		ProgramRunning,
 		ProgramBackoff,
 		ProgramStarting,
+		ProgramRunning,
 		ProgramBackoff,
 		ProgramStarting,
+		ProgramRunning,
 		ProgramBackoff,
 		ProgramFatal,
 	}, actualStates)
