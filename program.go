@@ -511,13 +511,17 @@ func (self *Program) startProcess() error {
 
 		go func() {
 			for line := range cmd.Stdout {
-				self.Log(line, true)
+				for _, ln := range strings.Split(line, "\n") {
+					self.Log(ln, true)
+				}
 			}
 		}()
 
 		go func() {
 			for line := range cmd.Stderr {
-				self.Log(line, false)
+				for _, ln := range strings.Split(line, "\n") {
+					self.Log(ln, false)
+				}
 			}
 		}()
 
