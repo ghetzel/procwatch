@@ -57,8 +57,8 @@ type Manager struct {
 	StdoutLogfileBackups  int         `json:"stdout_logfile_backups"  ini:"stdout_logfile_backups"`
 	DefaultStdoutLogfile  string      `json:"stdout_logfile"          ini:"stdout_logfile"`
 	DefaultStderrLogfile  string      `json:"stderr_logfile"          ini:"stderr_logfile"`
+	Server                *Server     `json:"server"                  ini:"server"`
 	Events                chan *Event `json:"-"`
-	Server                *Server
 	includes              []string
 	loadedConfigs         []string
 	eventHandlers         []EventHandler
@@ -74,7 +74,7 @@ type Manager struct {
 }
 
 func NewManager() *Manager {
-	manager := &Manager{
+	var manager = &Manager{
 		Version:               Version,
 		LogFileMaxBytes:       `50MB`,
 		StdoutLogfileMaxBytes: `50MB`,
@@ -82,15 +82,15 @@ func NewManager() *Manager {
 		StderrLogfileBackups:  10,
 		StdoutLogfileBackups:  10,
 		Events:                make(chan *Event),
-		programs:              make([]*Program, 0),
-		eventHandlers:         make([]EventHandler, 0),
-		doneStopping:          make(chan error),
-		includes:              make([]string, 0),
-		loadedConfigs:         make([]string, 0),
-		externalWaiters:       make(chan bool),
 		Server: &Server{
 			Address: DefaultAddress,
 		},
+		programs:        make([]*Program, 0),
+		eventHandlers:   make([]EventHandler, 0),
+		doneStopping:    make(chan error),
+		includes:        make([]string, 0),
+		loadedConfigs:   make([]string, 0),
+		externalWaiters: make(chan bool),
 	}
 
 	// register the log intercept function for this manager
@@ -107,6 +107,16 @@ func NewManagerFromConfig(configFile string) *Manager {
 }
 
 func (self *Manager) Initialize() error {
+	if self.Server == nil {
+		self.Server = &Server{
+			Address: DefaultAddress,
+		}
+	}
+
+	if self.Events == nil {
+		self.Events = make(chan *Event)
+	}
+
 	// load main config
 	if self.ConfigFile != `` {
 		if err := self.loadConfigFromFile(self.ConfigFile); err != nil {
