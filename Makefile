@@ -1,6 +1,3 @@
-.PHONY: test deps
-.EXPORT_ALL_VARIABLES:
-
 GO111MODULE     ?= on
 CGO_ENABLED      = 0
 LOCALS          := $(shell find . -type f -name '*.go' 2> /dev/null)
@@ -14,10 +11,14 @@ clean:
 	-rm -rf bin
 	-rm *.rpm *.tar.gz *.deb
 
-fmt:
+fmt: gofmt
 	go mod tidy
+	go vet ./...
 	go generate ./...
-	gofmt -w $(LOCALS)
+
+gofmt: $(LOCALS)
+$(LOCALS):
+	@gofmt -s -w $(@)
 
 test:
 	go build -tags nocgo -o bin/procwatch-tester tests/tester.go
@@ -33,3 +34,6 @@ packages: fmt deps build test
 	-fpm -s dir -t deb -n procwatch -v "`./bin/procwatch -v | cut -d' ' -f3`" -C pkg usr
 	-fpm -s dir -t rpm -n procwatch -v "`./bin/procwatch -v | cut -d' ' -f3`" -C pkg usr
 	cd bin && tar czvf "../procwatch-`../bin/procwatch -v | cut -d' ' -f3`.tar.gz" procwatch
+
+.PHONY: test deps $(LOCALS)
+.EXPORT_ALL_VARIABLES:

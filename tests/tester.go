@@ -47,7 +47,7 @@ func main() {
 		signal.Notify(signalChan, os.Interrupt)
 
 		go func() {
-			for _ = range signalChan {
+			for range signalChan {
 				os.Exit(c.Int(`exit-status`))
 			}
 		}()

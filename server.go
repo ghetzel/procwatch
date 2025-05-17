@@ -29,32 +29,32 @@ type Server struct {
 	manager     *Manager
 }
 
-func (self *Server) Initialize(manager *Manager) error {
-	self.manager = manager
+func (server *Server) Initialize(manager *Manager) error {
+	server.manager = manager
 
-	if self.Address == `` {
-		self.Address = DefaultAddress
+	if server.Address == `` {
+		server.Address = DefaultAddress
 	}
 
-	if self.UiDirectory == `` {
-		self.UiDirectory = `embedded`
+	if server.UiDirectory == `` {
+		server.UiDirectory = `embedded`
 	}
 
 	return nil
 }
 
-func (self *Server) Start() error {
-	var uiDir = self.UiDirectory
+func (server *Server) Start() error {
+	var uiDir = server.UiDirectory
 	var serverHandler = negroni.New()
 	var router = vestigo.NewRouter()
 
-	if self.UiDirectory == `` {
-		self.UiDirectory = `embedded`
+	if server.UiDirectory == `` {
+		server.UiDirectory = `embedded`
 	}
 	if d := os.Getenv(`UI`); d != `` {
-		self.UiDirectory = d
+		server.UiDirectory = d
 	}
-	if self.UiDirectory == `embedded` {
+	if server.UiDirectory == `embedded` {
 		uiDir = `/`
 	}
 
@@ -64,7 +64,7 @@ func (self *Server) Start() error {
 		ui.Log.Destination = os.DevNull
 	}
 
-	if self.UiDirectory == `embedded` {
+	if server.UiDirectory == `embedded` {
 		if sub, err := fs.Sub(embedded, `ui`); err == nil {
 			ui.SetFileSystem(http.FS(sub))
 		} else {
@@ -83,23 +83,23 @@ func (self *Server) Start() error {
 	})
 
 	router.Get(`/api/status`, func(w http.ResponseWriter, req *http.Request) {
-		Respond(w, map[string]interface{}{
+		Respond(w, map[string]any{
 			`version`: Version,
 		})
 	})
 
 	router.Get(`/api/manager`, func(w http.ResponseWriter, req *http.Request) {
-		Respond(w, self.manager)
+		Respond(w, server.manager)
 	})
 
 	router.Get(`/api/programs`, func(w http.ResponseWriter, req *http.Request) {
-		Respond(w, self.manager.Programs())
+		Respond(w, server.manager.Programs())
 	})
 
 	router.Get(`/api/programs/:program`, func(w http.ResponseWriter, req *http.Request) {
 		var name = vestigo.Param(req, `program`)
 
-		if program, ok := self.manager.Program(name); ok {
+		if program, ok := server.manager.Program(name); ok {
 			Respond(w, program)
 		} else {
 			http.Error(w, fmt.Sprintf("Program '%s' not found", name), http.StatusNotFound)
@@ -110,7 +110,7 @@ func (self *Server) Start() error {
 		var name = vestigo.Param(req, `program`)
 		var action = strings.ToLower(vestigo.Param(req, `action`))
 
-		if program, ok := self.manager.Program(name); ok {
+		if program, ok := server.manager.Program(name); ok {
 			switch action {
 			case `start`:
 				program.Start()
@@ -133,17 +133,17 @@ func (self *Server) Start() error {
 
 	serverHandler.UseHandler(router)
 
-	log.Infof("Running API server at %s", self.Address)
+	log.Infof("Running API server at %s", server.Address)
 
-	var server = &http.Server{
-		Addr:           self.Address,
+	var httpserv = &http.Server{
+		Addr:           server.Address,
 		Handler:        serverHandler,
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	if err := server.ListenAndServe(); err != nil {
+	if err := httpserv.ListenAndServe(); err != nil {
 		log.Error(err)
 		return err
 	}
@@ -151,7 +151,7 @@ func (self *Server) Start() error {
 	return nil
 }
 
-func Respond(w http.ResponseWriter, data interface{}) {
+func Respond(w http.ResponseWriter, data any) {
 	w.Header().Set(`Content-Type`, `application/json`)
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {

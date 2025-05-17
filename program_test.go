@@ -54,9 +54,10 @@ func stopAndVerifyManager(manager *Manager, assert *require.Assertions) {
 
 func TestSuccessfulProgramLifecycle(t *testing.T) {
 	assert := require.New(t)
+	actualStates = nil
 
 	manager, err := newManager(`one-success`)
-	assert.Nil(err)
+	assert.NoError(err)
 	go manager.Run()
 
 	program, ok := manager.Program(`one-success`)
@@ -77,7 +78,7 @@ func TestSuccessfulNonDefaultExitCodeProgramLifecycle(t *testing.T) {
 	assert := require.New(t)
 
 	manager, err := newManager(`one-success-nondefault-exit-code`)
-	assert.Nil(err)
+	assert.NoError(err)
 	go manager.Run()
 
 	program, ok := manager.Program(`one-success-exitcode`)
@@ -98,7 +99,7 @@ func TestFatalProgramLifecycle(t *testing.T) {
 	assert := require.New(t)
 
 	manager, err := newManager(`one-failure`)
-	assert.Nil(err)
+	assert.NoError(err)
 	go manager.Run()
 
 	program, ok := manager.Program(`one-failure`)
@@ -119,7 +120,7 @@ func TestFatalAutorestartProgramLifecycle(t *testing.T) {
 	assert := require.New(t)
 
 	manager, err := newManager(`one-failure-ar`)
-	assert.Nil(err)
+	assert.NoError(err)
 	go manager.Run()
 
 	program, ok := manager.Program(`one-failure-ar`)

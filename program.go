@@ -32,29 +32,29 @@ type ProgramState string
 
 const (
 	ProgramStopped  ProgramState = `STOPPED`
-	ProgramStarting              = `STARTING`
-	ProgramRunning               = `RUNNING`
-	ProgramBackoff               = `BACKOFF`
-	ProgramStopping              = `STOPPING`
-	ProgramExited                = `EXITED`
-	ProgramFatal                 = `FATAL`
-	ProgramUnknown               = `UNKNOWN`
+	ProgramStarting ProgramState = `STARTING`
+	ProgramRunning  ProgramState = `RUNNING`
+	ProgramBackoff  ProgramState = `BACKOFF`
+	ProgramStopping ProgramState = `STOPPING`
+	ProgramExited   ProgramState = `EXITED`
+	ProgramFatal    ProgramState = `FATAL`
+	ProgramUnknown  ProgramState = `UNKNOWN`
 )
 
 type ProgramSignal string
 
 const (
 	SIGKILL ProgramSignal = `KILL`
-	SIGINT                = `INT`
-	SIGTERM               = `TERM`
-	SIGHUP                = `HUP`
-	SIGQUIT               = `QUIT`
-	SIGUSR1               = `USR1`
-	SIGUSR2               = `USR2`
+	SIGINT  ProgramSignal = `INT`
+	SIGTERM ProgramSignal = `TERM`
+	SIGHUP  ProgramSignal = `HUP`
+	SIGQUIT ProgramSignal = `QUIT`
+	SIGUSR1 ProgramSignal = `USR1`
+	SIGUSR2 ProgramSignal = `USR2`
 )
 
-func (self ProgramSignal) Signal() os.Signal {
-	switch self {
+func (signal ProgramSignal) Signal() os.Signal {
+	switch signal {
 	case SIGINT:
 		return os.Interrupt
 	case SIGTERM:
@@ -77,7 +77,7 @@ type Program struct {
 	LoadIndex             int           `json:"index"                             ini:"-"`
 	State                 ProgramState  `json:"state"                             ini:"-"`
 	ProcessID             int           `json:"pid"                               ini:"-"`
-	Command               interface{}   `json:"command"                           ini:"-"`
+	Command               any           `json:"command"                           ini:"-"`
 	ProcessName           string        `json:"process_name,omitempty"            ini:"process_name,omitempty"`
 	NumProcs              int           `json:"numprocs,omitempty"                ini:"numprocs,omitempty"`
 	Directory             string        `json:"directory,omitempty"               ini:"directory,omitempty"`
@@ -87,7 +87,7 @@ type Program struct {
 	AutoRestart           string        `json:"autorestart,omitempty"             ini:"autorestart,omitempty"`
 	StartSeconds          int           `json:"startsecs,omitempty"               ini:"startsecs,omitempty"`
 	StartRetries          int           `json:"startretries,omitempty"            ini:"startretries,omitempty"`
-	ExitCodes             []int         `json:"exitcodes,omitempty"               delim:"," ini:"exitcodes,omitempty" delim:","`
+	ExitCodes             []int         `json:"exitcodes,omitempty"               delim:"," ini:"exitcodes,omitempty"`
 	StopSignal            ProgramSignal `json:"stopsignal,omitempty"              ini:"stopsignal,omitempty"`
 	StopWaitSeconds       int           `json:"stopwaitsecs,omitempty"            ini:"stopwaitsecs,omitempty"`
 	StopAsGroup           bool          `json:"stopasgroup,omitempty"             ini:"stopasgroup,omitempty"`
@@ -104,7 +104,7 @@ type Program struct {
 	StderrLogfileBackups  int           `json:"stderr_logfile_backups,omitempty"  ini:"stderr_logfile_backups,omitempty"`
 	StderrCaptureMaxBytes string        `json:"stderr_capture_maxbytes,omitempty" ini:"stderr_capture_maxbytes,omitempty"`
 	StderrEventsEnabled   bool          `json:"stderr_events_enabled,omitempty"   ini:"stderr_events_enabled,omitempty"`
-	Environment           []string      `json:"environment,omitempty"             delim:"," ini:"environment,omitempty" delim:","`
+	Environment           []string      `json:"environment,omitempty"             delim:"," ini:"environment,omitempty"`
 	ServerUrl             string        `json:"serverurl,omitempty"               ini:"serverurl,omitempty"`
 	Schedule              string        `json:"schedule,omitempty"                ini:"schedule,omitempty"`
 	CommandString         string        `json:"-"                                 ini:"command"`
@@ -177,26 +177,26 @@ func NewProgram(name string, manager *Manager) *Program {
 	}
 }
 
-func (self *Program) String() string {
-	switch self.GetState() {
+func (program *Program) String() string {
+	switch program.GetState() {
 	case ProgramStopped:
 		return `Not started`
 	case ProgramRunning:
-		if self.LastStartedAt.IsZero() {
-			return fmt.Sprintf("pid %d", self.PID())
+		if program.LastStartedAt.IsZero() {
+			return fmt.Sprintf("pid %d", program.PID())
 		} else {
-			return fmt.Sprintf("pid %d, uptime %v", self.PID(), time.Since(self.LastStartedAt).Round(time.Second))
+			return fmt.Sprintf("pid %d, uptime %v", program.PID(), time.Since(program.LastStartedAt).Round(time.Second))
 		}
 	case ProgramExited:
-		return fmt.Sprintf("exited at %v", self.LastExitedAt.Format(time.RFC3339))
+		return fmt.Sprintf("exited at %v", program.LastExitedAt.Format(time.RFC3339))
 	case ProgramFatal, ProgramBackoff:
-		return fmt.Sprintf("crashed with status %d at %v", self.LastExitStatus, self.LastExitedAt)
+		return fmt.Sprintf("crashed with status %d at %v", program.LastExitStatus, program.LastExitedAt)
 	}
 
 	return ``
 }
 
-func (self *Program) detectLevel(line string) log.Level {
+func (program *Program) detectLevel(line string) log.Level {
 	var iline = strings.ToLower(line)
 
 	if rxutil.IsMatchString(`(error|critical|fail)`, iline) {
@@ -210,28 +210,28 @@ func (self *Program) detectLevel(line string) log.Level {
 	}
 }
 
-func (self *Program) Log(line string, stdout bool) {
-	log.Logf(self.detectLevel(line), "[%s] \u25b8  %s", self.Name, line)
+func (program *Program) Log(line string, stdout bool) {
+	log.Logf(program.detectLevel(line), "[%s] \u25b8  %s", program.Name, line)
 
 	var logfile string
 	var suffix string
 
-	if stdout || self.RedirectStderr || self.manager.RedirectStderr {
-		logfile = self.StdoutLogfile
+	if stdout || program.RedirectStderr || program.manager.RedirectStderr {
+		logfile = program.StdoutLogfile
 
-		if self.RedirectStderr {
+		if program.RedirectStderr {
 			suffix = `.log`
 		} else {
 			suffix = `_out.log`
 		}
 	} else {
-		logfile = self.StderrLogfile
+		logfile = program.StderrLogfile
 		suffix = `_err.log`
 	}
 
 	if logfile == `AUTO` {
 		// TODO: this should be ProcessName, but has to wait until pattern interpolation is built
-		logfile = filepath.Join(self.manager.ChildLogDir, fmt.Sprintf("%s%s", self.Name, suffix))
+		logfile = filepath.Join(program.manager.ChildLogDir, fmt.Sprintf("%s%s", program.Name, suffix))
 	}
 
 	logfile = fileutil.MustExpandUser(logfile)
@@ -244,29 +244,29 @@ func (self *Program) Log(line string, stdout bool) {
 	case `stderr`:
 		fmt.Fprint(os.Stderr, strings.TrimSuffix(line, "\n")+"\n")
 	default:
-		if self.rollingLogger == nil {
+		if program.rollingLogger == nil {
 			var maxsize int
 			var backups int
 
-			if stdout || self.RedirectStderr {
-				backups = self.StdoutLogfileBackups
+			if stdout || program.RedirectStderr {
+				backups = program.StdoutLogfileBackups
 
-				if b, err := humanize.ParseBytes(self.StdoutLogfileMaxBytes); err == nil {
+				if b, err := humanize.ParseBytes(program.StdoutLogfileMaxBytes); err == nil {
 					maxsize = int(b)
 				} else {
 					maxsize = int(DefaultLogFileMaxBytes)
 				}
 			} else {
-				backups = self.StderrLogfileBackups
+				backups = program.StderrLogfileBackups
 
-				if b, err := humanize.ParseBytes(self.StderrLogfileMaxBytes); err == nil {
+				if b, err := humanize.ParseBytes(program.StderrLogfileMaxBytes); err == nil {
 					maxsize = int(b)
 				} else {
 					maxsize = int(DefaultLogFileMaxBytes)
 				}
 			}
 
-			self.rollingLogger = &lumberjack.Logger{
+			program.rollingLogger = &lumberjack.Logger{
 				Filename:   logfile,
 				MaxSize:    int(mathutil.ClampLower(float64(maxsize/1048576), 1)),
 				MaxBackups: backups,
@@ -279,7 +279,7 @@ func (self *Program) Log(line string, stdout bool) {
 		}
 
 		fmt.Fprintf(
-			self.rollingLogger,
+			program.rollingLogger,
 			"%s %s\n",
 			time.Now().Format(`2006-01-02 15:04:05,999`),
 			line,
@@ -287,18 +287,18 @@ func (self *Program) Log(line string, stdout bool) {
 	}
 }
 
-func (self *Program) GetState() ProgramState {
-	return self.State
+func (program *Program) GetState() ProgramState {
+	return program.State
 }
 
-func (self *Program) HasEverBeenStarted() bool {
-	return self.hasEverBeenStarted
+func (program *Program) HasEverBeenStarted() bool {
+	return program.hasEverBeenStarted
 }
 
-func (self *Program) ShouldAutoRestart() bool {
+func (program *Program) ShouldAutoRestart() bool {
 	var now = time.Now()
 
-	if cronstring := strings.TrimSpace(self.Schedule); cronstring != `` {
+	if cronstring := strings.TrimSpace(program.Schedule); cronstring != `` {
 		var schedule cron.Schedule
 
 		if s, err := cron.ParseStandard(cronstring); err == nil {
@@ -306,36 +306,36 @@ func (self *Program) ShouldAutoRestart() bool {
 		} else if s, err := cron.Parse(cronstring); err == nil {
 			schedule = s
 		} else {
-			log.Warningf("[%s] invalid schedule string %q - %v", self.Name, cronstring, err)
+			log.Warningf("[%s] invalid schedule string %q - %v", program.Name, cronstring, err)
 			return false
 		}
 
-		if next := schedule.Next(now); !self.NextScheduledAt.Equal(next) {
-			self.NextScheduledAt = next
-			self.LastTriggeredAt = now
-			log.Debugf("[%s] Scheduled start, next scheduled to start at %v", self.Name, self.NextScheduledAt)
+		if next := schedule.Next(now); !program.NextScheduledAt.Equal(next) {
+			program.NextScheduledAt = next
+			program.LastTriggeredAt = now
+			log.Debugf("[%s] Scheduled start, next scheduled to start at %v", program.Name, program.NextScheduledAt)
 			return true
 		} else {
 			return false
 		}
 	}
 
-	switch self.GetState() {
+	switch program.GetState() {
 	case ProgramFatal, ProgramStopped:
 		return false
 	}
 
-	var autorestart = strings.ToLower(self.AutoRestart)
+	var autorestart = strings.ToLower(program.AutoRestart)
 
 	switch autorestart {
 	case `unexpected`:
-		if self.IsExpectedStatus(self.LastExitStatus) {
+		if program.IsExpectedStatus(program.LastExitStatus) {
 			return false
 		}
 
 		fallthrough
 	case `true`:
-		if self.processRetryCount < self.StartRetries {
+		if program.processRetryCount < program.StartRetries {
 			return true
 		}
 	}
@@ -343,12 +343,12 @@ func (self *Program) ShouldAutoRestart() bool {
 	return false
 }
 
-func (self *Program) IsExpectedStatus(code int) bool {
-	if len(self.ExitCodes) == 0 {
-		self.ExitCodes = []int{0, 2}
+func (program *Program) IsExpectedStatus(code int) bool {
+	if len(program.ExitCodes) == 0 {
+		program.ExitCodes = []int{0, 2}
 	}
 
-	for _, validStatus := range self.ExitCodes {
+	for _, validStatus := range program.ExitCodes {
 		if code == validStatus {
 			return true
 		}
@@ -357,75 +357,75 @@ func (self *Program) IsExpectedStatus(code int) bool {
 	return false
 }
 
-func (self *Program) Start() int {
-	if self.InState(
+func (program *Program) Start() int {
+	if program.InState(
 		ProgramStopped,
 		ProgramExited,
 		ProgramFatal,
 		ProgramBackoff,
 	) {
-		self.hasEverBeenStarted = true
-		go self.monitorProcess()
+		program.hasEverBeenStarted = true
+		go program.monitorProcess()
 
-		self.transitionTo(ProgramStarting)
+		program.transitionTo(ProgramStarting)
 
-		// if process started successfully and stayed running for self.StartSeconds
-		if err := self.startProcess(); err == nil {
-			self.transitionTo(ProgramRunning)
+		// if process started successfully and stayed running for program.StartSeconds
+		if err := program.startProcess(); err == nil {
+			program.transitionTo(ProgramRunning)
 		} else {
-			log.Warningf("[%s] Failed to start: %v", self.Name, err)
+			log.Warningf("[%s] Failed to start: %v", program.Name, err)
 
-			self.killProcess(false)
+			program.killProcess(false)
 
-			if self.ShouldAutoRestart() {
-				self.transitionTo(ProgramBackoff)
+			if program.ShouldAutoRestart() {
+				program.transitionTo(ProgramBackoff)
 			} else {
-				self.transitionTo(ProgramFatal)
+				program.transitionTo(ProgramFatal)
 			}
 
-			self.LastExitedAt = time.Now()
+			program.LastExitedAt = time.Now()
 		}
 	}
 
-	return self.PID()
+	return program.PID()
 }
 
-func (self *Program) Stop() {
-	if self.InState(
+func (program *Program) Stop() {
+	if program.InState(
 		ProgramStarting,
 		ProgramRunning,
 	) {
-		self.transitionTo(ProgramStopping)
-		self.processRetryCount = 0
-		self.killProcess(false)
+		program.transitionTo(ProgramStopping)
+		program.processRetryCount = 0
+		program.killProcess(false)
 	}
 }
 
-func (self *Program) ForceStop() {
-	self.transitionTo(ProgramStopping)
-	self.killProcess(true)
+func (program *Program) ForceStop() {
+	program.transitionTo(ProgramStopping)
+	program.killProcess(true)
 }
 
-func (self *Program) StopFatal() {
-	self.Stop()
-	self.transitionTo(ProgramFatal)
+func (program *Program) StopFatal() {
+	program.Stop()
+	program.transitionTo(ProgramFatal)
 }
 
-func (self *Program) Restart() {
-	self.Stop()
-	self.Start()
+func (program *Program) Restart() {
+	program.Stop()
+	program.Start()
 }
 
-func (self *Program) PID() int {
-	if !self.InState(ProgramStarting, ProgramRunning, ProgramStopping) {
+func (program *Program) PID() int {
+	if !program.InState(ProgramStarting, ProgramRunning, ProgramStopping) {
 		return -1
 	}
 
-	return self.ProcessID
+	return program.ProcessID
 }
 
-func (self *Program) InState(states ...ProgramState) bool {
-	var currentState = self.GetState()
+func (program *Program) InState(states ...ProgramState) bool {
+	var currentState = program.GetState()
 
 	for _, state := range states {
 		if currentState == state {
@@ -436,30 +436,30 @@ func (self *Program) InState(states ...ProgramState) bool {
 	return false
 }
 
-func (self *Program) InTerminalState() bool {
-	return self.InState(
+func (program *Program) InTerminalState() bool {
+	return program.InState(
 		ProgramStopped,
 		ProgramExited,
 		ProgramFatal,
 	)
 }
 
-func (self *Program) transitionTo(state ProgramState) {
-	if self.GetState() != state {
+func (program *Program) transitionTo(state ProgramState) {
+	if program.GetState() != state {
 		switch state {
 		case ProgramBackoff:
-			self.processRetryCount += 1
+			program.processRetryCount += 1
 		}
 
-		self.State = state
-		self.manager.pushProcessStateEvent(state, self, nil)
+		program.State = state
+		program.manager.pushProcessStateEvent(state, program, nil)
 	}
 }
 
-func (self *Program) isRunning() bool {
-	self.processLock.Lock()
-	var process = self.cmd
-	self.processLock.Unlock()
+func (program *Program) isRunning() bool {
+	program.processLock.Lock()
+	var process = program.cmd
+	program.processLock.Unlock()
 
 	if process != nil {
 		if status := process.Status(); !status.Complete {
@@ -470,23 +470,23 @@ func (self *Program) isRunning() bool {
 	return false
 }
 
-func (self *Program) startProcess() error {
-	if self.isRunning() {
+func (program *Program) startProcess() error {
+	if program.isRunning() {
 		return fmt.Errorf("Program already running or holding onto stale process handle")
-	} else if !self.InState(ProgramStarting) {
-		return fmt.Errorf("Program in wrong state (wanted: STARTING, got: %s)", self.GetState())
+	} else if !program.InState(ProgramStarting) {
+		return fmt.Errorf("Program in wrong state (wanted: STARTING, got: %s)", program.GetState())
 	}
 
 	var words []string
 
-	if typeutil.IsArray(self.Command) {
-		words = sliceutil.Stringify(self.Command)
+	if typeutil.IsArray(program.Command) {
+		words = sliceutil.Stringify(program.Command)
 	} else {
 		var shwords = shellwords.NewParser()
 		shwords.ParseEnv = true
 		shwords.ParseBacktick = false
 
-		if w, err := shwords.Parse(typeutil.String(self.Command)); err == nil {
+		if w, err := shwords.Parse(typeutil.String(program.Command)); err == nil {
 			words = w
 		} else {
 			return err
@@ -506,13 +506,13 @@ func (self *Program) startProcess() error {
 			Streaming: true,
 		}, words[0], words[1:]...)
 
-		cmd.Env = self.getEnvironment()
-		cmd.Dir = fileutil.MustExpandUser(self.Directory)
+		cmd.Env = program.getEnvironment()
+		cmd.Dir = fileutil.MustExpandUser(program.Directory)
 
 		go func() {
 			for line := range cmd.Stdout {
 				for _, ln := range strings.Split(line, "\n") {
-					self.Log(ln, true)
+					program.Log(ln, true)
 				}
 			}
 		}()
@@ -520,42 +520,41 @@ func (self *Program) startProcess() error {
 		go func() {
 			for line := range cmd.Stderr {
 				for _, ln := range strings.Split(line, "\n") {
-					self.Log(ln, false)
+					program.Log(ln, false)
 				}
 			}
 		}()
 
-		log.Debugf("[%s] command: %s", self.Name, executil.Join(words))
+		log.Debugf("[%s] command: %s", program.Name, executil.Join(words))
 		cmd.Start()
 
 		if status := cmd.Status(); status.Error == nil {
 			// ---------------------------------------------------------------------
-			self.processLock.Lock()
+			program.processLock.Lock()
 
-			self.cmd = cmd
-			self.ProcessID = status.PID
-			self.LastStartedAt = time.Now()
+			program.cmd = cmd
+			program.ProcessID = status.PID
+			program.LastStartedAt = time.Now()
 
-			self.processLock.Unlock()
+			program.processLock.Unlock()
 			// ---------------------------------------------------------------------
 
-			if self.ProcessID > 0 {
-				log.Debugf("[%s] Program started: pid=%d", self.Name, self.ProcessID)
+			if program.ProcessID > 0 {
+				log.Debugf("[%s] Program started: pid=%d", program.Name, program.ProcessID)
 			}
 
-			go self.monitorProcess()
+			go program.monitorProcess()
 
-			if self.StartSeconds > 0 {
-				var startDuration = time.Duration(self.StartSeconds) * time.Second
+			if program.StartSeconds > 0 {
+				var startDuration = time.Duration(program.StartSeconds) * time.Second
 
-				select {
-				case <-time.After(startDuration):
-					if self.isRunning() {
-						log.Debugf("[%s] Program stayed running for %s, PID=%d", self.Name, startDuration, self.ProcessID)
-						return nil
-					} else {
-						return fmt.Errorf("Command did not stay running for %s", startDuration)
-					}
+				time.Sleep(startDuration)
+
+				if program.isRunning() {
+					log.Debugf("[%s] program stayed running for %s, PID=%d", program.Name, startDuration, program.ProcessID)
+					return nil
+				} else {
+					return fmt.Errorf("command did not stay running for %s", startDuration)
 				}
 			} else {
 				return nil
@@ -564,77 +563,77 @@ func (self *Program) startProcess() error {
 			return status.Error
 		}
 	} else {
-		return fmt.Errorf("Empty command specified")
+		return fmt.Errorf("empty command specified")
 	}
 }
 
-func (self *Program) monitorProcess() {
-	self.processLock.Lock()
-	var process = self.cmd
-	self.processLock.Unlock()
+func (program *Program) monitorProcess() {
+	program.processLock.Lock()
+	var process = program.cmd
+	program.processLock.Unlock()
 
 	if process != nil {
 		<-process.Done()
 		var status = process.Status()
 
 		if status.Error == nil {
-			log.Debugf("[%s] PID %d exited with status %d", self.Name, status.PID, status.Exit)
+			log.Debugf("[%s] PID %d exited with status %d", program.Name, status.PID, status.Exit)
 		} else {
-			log.Warningf("[%s] PID %d exited with status %d: %v", self.Name, status.PID, status.Exit, status.Error)
+			log.Warningf("[%s] PID %d exited with status %d: %v", program.Name, status.PID, status.Exit, status.Error)
 		}
 
 		// update the last known exit status
-		self.LastExitStatus = status.Exit
+		program.LastExitStatus = status.Exit
 
-		if self.IsExpectedStatus(self.LastExitStatus) {
+		if program.IsExpectedStatus(program.LastExitStatus) {
 			// if the code is an expected one, EXITED
-			self.LastExitedAt = time.Now()
-			self.transitionTo(ProgramExited)
+			program.LastExitedAt = time.Now()
+			program.transitionTo(ProgramExited)
 
-		} else if self.ShouldAutoRestart() {
+		} else if program.ShouldAutoRestart() {
 			// if not expected, but we should restart: BACKOFF
-			self.transitionTo(ProgramBackoff)
+			program.transitionTo(ProgramBackoff)
 		} else {
 			// unexpected status that shouldn't restart: FATAL
-			self.transitionTo(ProgramFatal)
+			program.transitionTo(ProgramFatal)
 		}
 
-		self.processLock.Lock()
-		self.cmd = nil
-		self.ProcessID = 0
-		self.processLock.Unlock()
+		program.processLock.Lock()
+		program.cmd = nil
+		program.ProcessID = 0
+		program.processLock.Unlock()
 	}
 }
 
-func (self *Program) killProcess(force bool) error {
-	if self.InState(ProgramStarting, ProgramRunning, ProgramStopping) {
-		self.processLock.Lock()
-		var process = self.cmd
-		self.processLock.Unlock()
+func (program *Program) killProcess(force bool) error {
+	if program.InState(ProgramStarting, ProgramRunning, ProgramStopping) {
+		program.processLock.Lock()
+		var process = program.cmd
+		program.processLock.Unlock()
 
 		if process != nil {
 			var status = process.Status()
-			log.Debugf("[%s] Stopping PID %d with", self.Name, status.PID)
+			log.Debugf("[%s] Stopping PID %d with", program.Name, status.PID)
 
 			if err := process.Stop(); err == nil {
 				select {
 				case <-process.Done():
 					if wait := process.Status(); wait.Error != nil {
 						if force {
-							self.transitionTo(ProgramFatal)
+							program.transitionTo(ProgramFatal)
 						} else {
-							self.transitionTo(ProgramStopped)
+							program.transitionTo(ProgramStopped)
 						}
 
 						return err
 					}
 
-				case <-time.After(time.Duration(self.StopWaitSeconds) * time.Second):
+				case <-time.After(time.Duration(program.StopWaitSeconds) * time.Second):
 					if !force {
-						log.Warningf("[%s] Signal not handled in time, sending SIGKILL", self.Name)
-						return self.killProcess(true)
+						log.Warningf("[%s] Signal not handled in time, sending SIGKILL", program.Name)
+						return program.killProcess(true)
 					} else {
-						return fmt.Errorf("[%s] SIGKILL not handled", self.Name)
+						return fmt.Errorf("[%s] SIGKILL not handled", program.Name)
 					}
 				}
 			} else {
@@ -646,6 +645,6 @@ func (self *Program) killProcess(force bool) error {
 	return nil
 }
 
-func (self *Program) getEnvironment() []string {
-	return append(os.Environ(), self.Environment...)
+func (program *Program) getEnvironment() []string {
+	return append(os.Environ(), program.Environment...)
 }

@@ -3,7 +3,7 @@ package procwatch
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -34,12 +34,12 @@ type LogLine struct {
 	Program    *Program
 }
 
-func (self LogLine) String() string {
-	return self.Text
+func (line LogLine) String() string {
+	return line.Text
 }
 
-func (self LogLine) IsEmpty() bool {
-	return len(self.Text) == 0
+func (line LogLine) IsEmpty() bool {
+	return len(line.Text) == 0
 }
 
 type Manager struct {
@@ -65,8 +65,6 @@ type Manager struct {
 	programs              []*Program
 	stopping              bool
 	doneStopping          chan error
-	lastError             error
-	eventHandlerRunning   bool
 	externalWaiters       chan bool
 	intercept             string
 	rollingLogger         *lumberjack.Logger
@@ -106,34 +104,34 @@ func NewManagerFromConfig(configFile string) *Manager {
 	return manager
 }
 
-func (self *Manager) Initialize() error {
-	if self.Server == nil {
-		self.Server = &Server{
+func (manager *Manager) Initialize() error {
+	if manager.Server == nil {
+		manager.Server = &Server{
 			Address: DefaultAddress,
 		}
 	}
 
-	if self.Events == nil {
-		self.Events = make(chan *Event)
+	if manager.Events == nil {
+		manager.Events = make(chan *Event)
 	}
 
 	// load main config
-	if self.ConfigFile != `` {
-		if err := self.loadConfigFromFile(self.ConfigFile); err != nil {
+	if manager.ConfigFile != `` {
+		if err := manager.loadConfigFromFile(manager.ConfigFile); err != nil {
 			return err
 		}
 
 		// load included configs (if any were specified in the main config)
-		for _, includeGlob := range self.includes {
+		for _, includeGlob := range manager.includes {
 			if include, err := fileutil.ExpandUser(includeGlob); err == nil {
 				if matches, err := filepath.Glob(include); err == nil {
 					for _, includedConfig := range matches {
-						if sliceutil.ContainsString(self.loadedConfigs, includedConfig) {
-							return fmt.Errorf("Already loaded configuration at %s", includedConfig)
+						if sliceutil.ContainsString(manager.loadedConfigs, includedConfig) {
+							return fmt.Errorf("already loaded configuration at %s", includedConfig)
 						}
 
-						if err := self.loadConfigFromFile(includedConfig); err == nil {
-							self.loadedConfigs = append(self.loadedConfigs, includedConfig)
+						if err := manager.loadConfigFromFile(includedConfig); err == nil {
+							manager.loadedConfigs = append(manager.loadedConfigs, includedConfig)
 						} else {
 							return err
 						}
@@ -147,32 +145,32 @@ func (self *Manager) Initialize() error {
 		}
 	}
 
-	if self.ChildLogDir == `` {
+	if manager.ChildLogDir == `` {
 		if u, err := user.Current(); err == nil && u.Uid == `0` {
-			self.ChildLogDir = `/var/log/procwatch`
+			manager.ChildLogDir = `/var/log/procwatch`
 		} else {
-			self.ChildLogDir, _ = fileutil.ExpandUser(`~/.cache/procwatch`)
+			manager.ChildLogDir, _ = fileutil.ExpandUser(`~/.cache/procwatch`)
 		}
 	}
 
-	if self.LogFile == `` {
-		self.LogFile = filepath.Join(self.ChildLogDir, `procwatch.log`)
+	if manager.LogFile == `` {
+		manager.LogFile = filepath.Join(manager.ChildLogDir, `procwatch.log`)
 	}
 
-	if self.LogFileMaxBytes != `` {
-		if b, err := humanize.ParseBytes(self.LogFileMaxBytes); err == nil {
-			self.logFileMaxBytes = b
+	if manager.LogFileMaxBytes != `` {
+		if b, err := humanize.ParseBytes(manager.LogFileMaxBytes); err == nil {
+			manager.logFileMaxBytes = b
 		} else {
 			return fmt.Errorf("logfile_maxbytes: %v", err)
 		}
 	} else {
-		self.LogFileMaxBytes = DefaultLogFileMaxBytes.To(convutil.Megabyte)
-		self.logFileMaxBytes = uint64(DefaultLogFileMaxBytes)
+		manager.LogFileMaxBytes = DefaultLogFileMaxBytes.To(convutil.Megabyte)
+		manager.logFileMaxBytes = uint64(DefaultLogFileMaxBytes)
 	}
 
-	if self.Server != nil {
-		if err := self.Server.Initialize(self); err == nil {
-			go self.Server.Start()
+	if manager.Server != nil {
+		if err := manager.Server.Initialize(manager); err == nil {
+			go manager.Server.Start()
 		} else {
 			return err
 		}
@@ -181,30 +179,30 @@ func (self *Manager) Initialize() error {
 	return nil
 }
 
-func (self *Manager) AddProgram(program *Program) error {
-	newprogram := NewProgram(program.Name, self)
+func (manager *Manager) AddProgram(program *Program) error {
+	newprogram := NewProgram(program.Name, manager)
 
 	if err := structutil.CopyNonZero(newprogram, program); err == nil {
-		newprogram.LoadIndex = len(self.programs)
-		self.programs = append(self.programs, newprogram)
+		newprogram.LoadIndex = len(manager.programs)
+		manager.programs = append(manager.programs, newprogram)
 		return nil
 	} else {
 		return err
 	}
 }
 
-func (self *Manager) loadConfigFromFile(filename string) error {
+func (manager *Manager) loadConfigFromFile(filename string) error {
 	filename = fileutil.MustExpandUser(filename)
 	log.Infof("Loading configuration file: %s", filename)
 
-	if data, err := ioutil.ReadFile(filename); err == nil {
-		if err := LoadGlobalConfig(data, self); err != nil {
+	if data, err := os.ReadFile(filename); err == nil {
+		if err := LoadGlobalConfig(data, manager); err != nil {
 			return err
 		}
 
-		if loaded, err := LoadProgramsFromConfig(data, self); err == nil {
+		if loaded, err := LoadProgramsFromConfig(data, manager); err == nil {
 			for _, program := range loaded {
-				self.AddProgram(program)
+				manager.AddProgram(program)
 			}
 		} else {
 			return err
@@ -216,25 +214,25 @@ func (self *Manager) loadConfigFromFile(filename string) error {
 	return nil
 }
 
-func (self *Manager) Run() {
-	self.stopping = false
+func (manager *Manager) Run() {
+	manager.stopping = false
 
-	go self.startEventLogger()
+	go manager.startEventLogger()
 
 	for {
 		var checkLock sync.WaitGroup
 
-		for _, program := range self.programs {
+		for _, program := range manager.programs {
 			checkLock.Add(1)
-			go self.checkProgramState(program, &checkLock)
+			go manager.checkProgramState(program, &checkLock)
 		}
 
 		// wait for all program checks to be complete for this iteration
 		checkLock.Wait()
 
 		// if we're stopping the manager, and if all the programs are in a terminal state, quit the loop
-		if self.stopping {
-			self.externalWaiters <- true
+		if manager.stopping {
+			manager.externalWaiters <- true
 			break
 		}
 
@@ -242,15 +240,15 @@ func (self *Manager) Run() {
 	}
 }
 
-func (self *Manager) Wait() {
-	<-self.externalWaiters
+func (manager *Manager) Wait() {
+	<-manager.externalWaiters
 	log.Debugf("Mainloop exited")
 }
 
-func (self *Manager) Stop(force bool) {
-	self.stopping = true
+func (manager *Manager) Stop(force bool) {
+	manager.stopping = true
 
-	for _, program := range self.programs {
+	for _, program := range manager.programs {
 		if force {
 			log.Warningf("Force stopping program %s", program.Name)
 			program.ForceStop()
@@ -263,8 +261,8 @@ func (self *Manager) Stop(force bool) {
 	log.Infof("All programs stopped, stopping manager...")
 }
 
-func (self *Manager) AddEventHandler(handler EventHandler) {
-	self.eventHandlers = append(self.eventHandlers, handler)
+func (manager *Manager) AddEventHandler(handler EventHandler) {
+	manager.eventHandlers = append(manager.eventHandlers, handler)
 }
 
 // Process Management States
@@ -284,8 +282,8 @@ func (self *Manager) AddEventHandler(handler EventHandler) {
 //	\- manually stopped?  -> STOPPING
 //	                         |- stopped in time? -> [STOPPED]
 //	                         \- no?              -> [FATAL]
-func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
-	var isStopping = self.stopping
+func (manager *Manager) checkProgramState(program *Program, checkLock *sync.WaitGroup) {
+	var isStopping = manager.stopping
 	defer checkLock.Done()
 
 	if isStopping {
@@ -325,12 +323,12 @@ func (self *Manager) checkProgramState(program *Program, checkLock *sync.WaitGro
 	}
 }
 
-func (self *Manager) Programs() []*Program {
-	return self.programs
+func (manager *Manager) Programs() []*Program {
+	return manager.programs
 }
 
-func (self *Manager) Program(name string) (*Program, bool) {
-	for _, program := range self.programs {
+func (manager *Manager) Program(name string) (*Program, bool) {
+	for _, program := range manager.programs {
 		if program.Name == name {
 			return program, true
 		}
@@ -339,10 +337,10 @@ func (self *Manager) Program(name string) (*Program, bool) {
 	return nil, false
 }
 
-func (self *Manager) GetProgramsByState(states ...ProgramState) []*Program {
+func (manager *Manager) GetProgramsByState(states ...ProgramState) []*Program {
 	programs := make([]*Program, 0)
 
-	for _, program := range self.programs {
+	for _, program := range manager.programs {
 		currentState := program.GetState()
 
 		for _, state := range states {
@@ -355,22 +353,18 @@ func (self *Manager) GetProgramsByState(states ...ProgramState) []*Program {
 	return programs
 }
 
-func (self *Manager) pushEvent(names []string, sourceType EventSource, source interface{}, args ...string) {
-	self.Events <- NewEvent(names, `MANAGER`, sourceType, source, args...)
-}
-
-func (self *Manager) pushProcessStateEvent(state ProgramState, source *Program, err error, args ...string) {
+func (manager *Manager) pushProcessStateEvent(state ProgramState, source *Program, err error, args ...string) {
 	event := NewEvent([]string{
 		`PROCESS_STATE`,
 		fmt.Sprintf("PROCESS_STATE_%v", state),
 	}, source.Name, ProgramSource, source, args...)
 
 	event.Error = err
-	self.Events <- event
+	manager.Events <- event
 }
 
-func (self *Manager) startEventLogger() {
-	for event := range self.Events {
+func (manager *Manager) startEventLogger() {
+	for event := range manager.Events {
 		if event.Error != nil {
 			log.Error(event.Error)
 		} else {
@@ -378,7 +372,7 @@ func (self *Manager) startEventLogger() {
 		}
 
 		// dispatch event to all registered handlers
-		for _, handler := range self.eventHandlers {
+		for _, handler := range manager.eventHandlers {
 			handler(event)
 		}
 	}
@@ -415,24 +409,24 @@ func LoadGlobalConfig(data []byte, manager *Manager) error {
 	return nil
 }
 
-func (self *Manager) Log(level log.Level, line string, stack log.StackItems) {
-	if self.LogFile == `` {
+func (manager *Manager) Log(level log.Level, line string, stack log.StackItems) {
+	if manager.LogFile == `` {
 		return
-	} else if level < log.GetLevel(self.LogLevel) {
+	} else if level < log.GetLevel(manager.LogLevel) {
 		return
 	}
 
-	if self.rollingLogger == nil {
-		self.rollingLogger = &lumberjack.Logger{
-			Filename:   self.LogFile,
-			MaxSize:    int(mathutil.ClampLower(float64(self.logFileMaxBytes/1048576), 1)),
-			MaxBackups: self.LogFileBackups,
+	if manager.rollingLogger == nil {
+		manager.rollingLogger = &lumberjack.Logger{
+			Filename:   manager.LogFile,
+			MaxSize:    int(mathutil.ClampLower(float64(manager.logFileMaxBytes/1048576), 1)),
+			MaxBackups: manager.LogFileBackups,
 			Compress:   true,
 		}
 	}
 
 	fmt.Fprintf(
-		self.rollingLogger,
+		manager.rollingLogger,
 		"%s %v: %s\n",
 		time.Now().Format(`2006-01-02 15:04:05,999`),
 		level,
@@ -440,14 +434,14 @@ func (self *Manager) Log(level log.Level, line string, stack log.StackItems) {
 	)
 }
 
-func (self *Manager) Tail(ctx context.Context) <-chan LogLine {
+func (manager *Manager) Tail(ctx context.Context) <-chan LogLine {
 	var tailchan = make(chan LogLine)
 
 	go func() {
 		defer close(tailchan)
 
 		for {
-			if tailer, err := tail.TailFile(self.rollingLogger.Filename, tail.Config{
+			if tailer, err := tail.TailFile(manager.rollingLogger.Filename, tail.Config{
 				Poll:   true,
 				Follow: true,
 				ReOpen: true,

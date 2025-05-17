@@ -14,8 +14,8 @@ const (
 	ProgramSource EventSource = iota
 )
 
-func (self EventSource) String() string {
-	switch self {
+func (src EventSource) String() string {
+	switch src {
 	case ProgramSource:
 		return `Program`
 	default:
@@ -30,10 +30,10 @@ type Event struct {
 	Error      error
 	Arguments  []string
 	SourceType EventSource
-	Source     interface{}
+	Source     any
 }
 
-func NewEvent(names []string, label string, sourceType EventSource, source interface{}, args ...string) *Event {
+func NewEvent(names []string, label string, sourceType EventSource, source any, args ...string) *Event {
 	return &Event{
 		Names:      names,
 		Label:      label,
@@ -44,28 +44,12 @@ func NewEvent(names []string, label string, sourceType EventSource, source inter
 	}
 }
 
-func (self *Event) String() string {
+func (event *Event) String() string {
 	return fmt.Sprintf("[%s] %s",
-		self.Label,
-		strings.Join(self.Names, `,`))
+		event.Label,
+		strings.Join(event.Names, `,`))
 }
 
-func (self *Event) HasName(name string) bool {
-	return sliceutil.ContainsString(self.Names, name)
-}
-
-func (self *Event) sourceDetail() string {
-	var detail string
-
-	if self.Source != nil {
-		detail = fmt.Sprintf(": %T", self.Source)
-
-		if len(self.Arguments) > 0 {
-			detail = fmt.Sprintf("%s<%s>",
-				detail,
-				strings.Join(self.Arguments, `, `))
-		}
-	}
-
-	return detail
+func (event *Event) HasName(name string) bool {
+	return sliceutil.ContainsString(event.Names, name)
 }
