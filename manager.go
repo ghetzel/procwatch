@@ -3,7 +3,7 @@ package procwatch
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -195,14 +195,20 @@ func (manager *Manager) loadConfigFromFile(filename string) error {
 	filename = fileutil.MustExpandUser(filename)
 	log.Infof("Loading configuration file: %s", filename)
 
-	if data, err := os.ReadFile(filename); err == nil {
-		if err := LoadGlobalConfig(data, manager); err != nil {
-			return err
-		}
+	if stream, err := fileutil.Retrieve(context.Background(), filename); err == nil {
+		defer stream.Close()
 
-		if loaded, err := LoadProgramsFromConfig(data, manager); err == nil {
-			for _, program := range loaded {
-				manager.AddProgram(program)
+		if data, err := io.ReadAll(stream); err == nil {
+			if err := LoadGlobalConfig(data, manager); err != nil {
+				return err
+			}
+
+			if loaded, err := LoadProgramsFromConfig(data, manager); err == nil {
+				for _, program := range loaded {
+					manager.AddProgram(program)
+				}
+			} else {
+				return err
 			}
 		} else {
 			return err
